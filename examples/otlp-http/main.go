@@ -7,46 +7,47 @@ import (
 	"time"
 
 	bootstrap "github.com/LinPr/go-bootstrap"
-	"go.opentelemetry.io/otel"
+	"github.com/LinPr/go-bootstrap/otel"
+	sdkotel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
 	// 配置 OTLP HTTP 导出器
-	config := &bootstrap.Config{
+	config := &otel.Config{
 		ServiceName:    "otlp-http-example",
 		ServiceVersion: "1.0.0",
-		Log: bootstrap.LogConfig{
+		Log: otel.LogConfig{
 			Enable:     true,
-			Type:       bootstrap.ExporterTypeHTTP,
+			Type:       otel.ExporterTypeHTTP,
 			RemoteAddr: "http://localhost:4318/v1/logs",
 			Headers: map[string]string{
 				"X-Custom-Header": "custom-value",
 			},
 		},
-		Trace: bootstrap.TraceConfig{
+		Trace: otel.TraceConfig{
 			Enable:        true,
-			Type:          bootstrap.ExporterTypeHTTP,
+			Type:          otel.ExporterTypeHTTP,
 			RemoteAddr:    "http://localhost:4318/v1/traces",
 			SamplingRatio: 1.0,
 		},
-		Metric: bootstrap.MetricConfig{
+		Metric: otel.MetricConfig{
 			Enable:               true,
-			Type:                 bootstrap.ExporterTypeHTTP,
+			Type:                 otel.ExporterTypeHTTP,
 			RemoteAddr:           "http://localhost:4318/v1/metrics",
 			IntervalSeconds:      10,
 			EnableRuntimeMetrics: true,
 		},
 	}
 
-	if err := bootstrap.Initialize(config); err != nil {
+	if err := bootstrap.InitOtel(config); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := bootstrap.Shutdown(ctx); err != nil {
+		if err := bootstrap.ShutdownOtel(ctx); err != nil {
 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
 		}
 	}()
@@ -55,7 +56,7 @@ func main() {
 
 	// 创建追踪
 	ctx := context.Background()
-	tracer := otel.Tracer("otlp-http-example")
+	tracer := sdkotel.Tracer("otlp-http-example")
 
 	ctx, span := tracer.Start(ctx, "http-export-operation")
 	span.SetAttributes(
@@ -75,7 +76,7 @@ func main() {
 }
 
 func processRequest(ctx context.Context) {
-	tracer := otel.Tracer("otlp-http-example")
+	tracer := sdkotel.Tracer("otlp-http-example")
 	_, span := tracer.Start(ctx, "process-request")
 	defer span.End()
 

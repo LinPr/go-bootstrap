@@ -9,43 +9,44 @@ import (
 	"time"
 
 	bootstrap "github.com/LinPr/go-bootstrap"
+	"github.com/LinPr/go-bootstrap/otel"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
+	sdkotel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
 func main() {
 	// 配置 Prometheus 导出器
-	config := &bootstrap.Config{
+	config := &otel.Config{
 		ServiceName:    "prometheus-example",
 		ServiceVersion: "1.0.0",
-		Log: bootstrap.LogConfig{
+		Log: otel.LogConfig{
 			Enable: true,
-			Type:   bootstrap.ExporterTypeStdout,
+			Type:   otel.ExporterTypeStdout,
 			Pretty: false,
 		},
-		Trace: bootstrap.TraceConfig{
+		Trace: otel.TraceConfig{
 			Enable:        true,
-			Type:          bootstrap.ExporterTypeStdout,
+			Type:          otel.ExporterTypeStdout,
 			Pretty:        false,
 			SamplingRatio: 1.0,
 		},
-		Metric: bootstrap.MetricConfig{
+		Metric: otel.MetricConfig{
 			Enable:               true,
-			Type:                 bootstrap.ExporterTypePrometheus,
+			Type:                 otel.ExporterTypePrometheus,
 			EnableRuntimeMetrics: true,
 		},
 	}
 
-	if err := bootstrap.Initialize(config); err != nil {
+	if err := bootstrap.InitOtel(config); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := bootstrap.Shutdown(ctx); err != nil {
+		if err := bootstrap.ShutdownOtel(ctx); err != nil {
 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
 		}
 	}()
@@ -53,7 +54,7 @@ func main() {
 	slog.Info("Prometheus example started")
 
 	// 创建自定义指标
-	meter := otel.Meter("prometheus-example")
+	meter := sdkotel.Meter("prometheus-example")
 
 	// 计数器
 	requestCounter, err := meter.Int64Counter(
@@ -99,7 +100,7 @@ func main() {
 		ctx := r.Context()
 
 		// 创建 trace
-		tracer := otel.Tracer("prometheus-example")
+		tracer := sdkotel.Tracer("prometheus-example")
 		_, span := tracer.Start(ctx, "handle-api-request")
 		defer span.End()
 

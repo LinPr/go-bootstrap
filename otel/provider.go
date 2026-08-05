@@ -1,4 +1,4 @@
-package gobootstrap
+package otel
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type Provider struct {
 }
 
 // NewProvider 创建一个新的 OpenTelemetry 提供者
-func NewProvider(config *Config) (*Provider, error) {
+func newProvider(config *Config) (*Provider, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -136,7 +136,7 @@ func (p *Provider) initLog(logConfig *LogConfig, res *resource.Resource) error {
 	)
 	slog.SetDefault(logger)
 
-	slog.Info("log provider initialized", "exporter", logConfig.Type)
+	slog.Info("log provider initialized", "exporter", string(logConfig.Type))
 	return nil
 }
 
@@ -192,7 +192,7 @@ func (p *Provider) initTrace(traceConfig TraceConfig, res *resource.Resource) er
 
 	otel.SetTracerProvider(p.traceProvider)
 
-	slog.Info("trace provider initialized", "exporter", traceConfig.Type)
+	slog.Info("trace provider initialized", "exporter", string(traceConfig.Type))
 	return nil
 }
 
@@ -276,7 +276,7 @@ func (p *Provider) initMetric(metricConfig MetricConfig, res *resource.Resource)
 		}
 	}
 
-	slog.Info("metric provider initialized", "exporter", metricConfig.Type)
+	slog.Info("metric provider initialized", "exporter", string(metricConfig.Type))
 	return nil
 }
 
@@ -340,19 +340,4 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// GetLoggerProvider 获取日志提供者
-func (p *Provider) GetLoggerProvider() *log.LoggerProvider {
-	return p.logProvider
-}
-
-// GetTracerProvider 获取追踪提供者
-func (p *Provider) GetTracerProvider() *trace.TracerProvider {
-	return p.traceProvider
-}
-
-// GetMeterProvider 获取指标提供者
-func (p *Provider) GetMeterProvider() *metric.MeterProvider {
-	return p.metricProvider
 }

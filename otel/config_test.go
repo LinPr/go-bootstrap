@@ -1,12 +1,12 @@
-package gobootstrap
+package otel
 
 import "testing"
 
 func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
 
-	if config.ServiceName != "unknown-service" {
-		t.Errorf("expected service name 'unknown-service', got '%s'", config.ServiceName)
+	if config.ServiceName != "default-service" {
+		t.Errorf("expected service name 'default-service', got '%s'", config.ServiceName)
 	}
 
 	if config.ServiceVersion != "0.0.0" {

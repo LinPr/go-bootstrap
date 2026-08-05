@@ -6,38 +6,38 @@ import (
 	"log/slog"
 	"time"
 
-	bootstrap "github.com/LinPr/go-bootstrap"
+	bsotel "github.com/LinPr/go-bootstrap/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
 	// 自定义配置 - 只启用部分功能
-	config := &bootstrap.Config{
+	config := &bsotel.Config{
 		ServiceName:    "custom-example",
 		ServiceVersion: "2.1.0",
 		// 只启用日志，禁用追踪和指标
-		Log: bootstrap.LogConfig{
+		Log: bsotel.LogConfig{
 			Enable: true,
-			Type:   bootstrap.ExporterTypeStdout,
+			Type:   bsotel.ExporterTypeStdout,
 			Pretty: true,
 		},
-		Trace: bootstrap.TraceConfig{
+		Trace: bsotel.TraceConfig{
 			Enable: false, // 禁用追踪
 		},
-		Metric: bootstrap.MetricConfig{
+		Metric: bsotel.MetricConfig{
 			Enable: false, // 禁用指标
 		},
 	}
 
-	if err := bootstrap.Initialize(config); err != nil {
+	if err := bsotel.InitOtelProvider(config); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := bootstrap.Shutdown(ctx); err != nil {
+		if err := bsotel.ShutdownOtelProvider(ctx); err != nil {
 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
 		}
 	}()

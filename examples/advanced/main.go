@@ -18,14 +18,14 @@ func main() {
 	config.ServiceName = "advanced-example"
 	config.ServiceVersion = "1.0.0"
 
-	if err := bootstrap.Initialize(config); err != nil {
+	if err := bootstrap.InitOtel(config); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := bootstrap.Shutdown(ctx); err != nil {
+		if err := bootstrap.ShutdownOtel(ctx); err != nil {
 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
 		}
 	}()

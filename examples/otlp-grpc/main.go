@@ -6,36 +6,37 @@ import (
 	"log/slog"
 	"time"
 
-	bootstrap "github.com/LinPr/go-bootstrap"
-	"go.opentelemetry.io/otel"
+	bsotel "github.com/LinPr/go-bootstrap"
+	"github.com/LinPr/go-bootstrap/otel"
+	sdkotel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
 	// 配置 OTLP gRPC 导出器
-	config := &bootstrap.Config{
+	config := &otel.Config{
 		ServiceName:    "otlp-grpc-example",
 		ServiceVersion: "1.0.0",
-		Log: bootstrap.LogConfig{
+		Log: otel.LogConfig{
 			Enable:     true,
-			Type:       bootstrap.ExporterTypeGRPC,
+			Type:       otel.ExporterTypeGRPC,
 			RemoteAddr: "localhost:4317",
 			Headers: map[string]string{
 				"authorization": "Bearer your-token-here",
 			},
 		},
-		Trace: bootstrap.TraceConfig{
+		Trace: otel.TraceConfig{
 			Enable:        true,
-			Type:          bootstrap.ExporterTypeGRPC,
+			Type:          otel.ExporterTypeGRPC,
 			RemoteAddr:    "localhost:4317",
 			SamplingRatio: 1.0,
 			Headers: map[string]string{
 				"authorization": "Bearer your-token-here",
 			},
 		},
-		Metric: bootstrap.MetricConfig{
+		Metric: otel.MetricConfig{
 			Enable:               true,
-			Type:                 bootstrap.ExporterTypeGRPC,
+			Type:                 otel.ExporterTypeGRPC,
 			RemoteAddr:           "localhost:4317",
 			IntervalSeconds:      10,
 			EnableRuntimeMetrics: true,
@@ -45,14 +46,14 @@ func main() {
 		},
 	}
 
-	if err := bootstrap.Initialize(config); err != nil {
+	if err := bsotel.InitOtel(config); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := bootstrap.Shutdown(ctx); err != nil {
+		if err := bsotel.ShutdownOtel(ctx); err != nil {
 			log.Printf("Failed to shutdown OpenTelemetry: %v", err)
 		}
 	}()
@@ -61,7 +62,7 @@ func main() {
 
 	// 创建追踪
 	ctx := context.Background()
-	tracer := otel.Tracer("otlp-grpc-example")
+	tracer := sdkotel.Tracer("otlp-grpc-example")
 
 	ctx, span := tracer.Start(ctx, "grpc-export-operation")
 	span.SetAttributes(
@@ -81,7 +82,7 @@ func main() {
 }
 
 func performTask(ctx context.Context) {
-	tracer := otel.Tracer("otlp-grpc-example")
+	tracer := sdkotel.Tracer("otlp-grpc-example")
 	_, span := tracer.Start(ctx, "perform-task")
 	defer span.End()
 

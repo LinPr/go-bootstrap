@@ -2,62 +2,26 @@ package gobootstrap
 
 import (
 	"context"
-	"fmt"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/log/global"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	bsotel "github.com/LinPr/go-bootstrap/otel"
 )
 
-var globalProvider *Provider
-
-// Initialize 使用提供的配置初始化 OpenTelemetry SDK
-// 这是一个便捷方法，会设置全局提供者
-func Initialize(config *Config) error {
-	provider, err := NewProvider(config)
-	if err != nil {
-		return fmt.Errorf("failed to create provider: %w", err)
-	}
-
-	globalProvider = provider
-	return nil
+// InitOtel 初始化 OpenTelemetry SDK
+func InitOtel(config *bsotel.Config) error {
+	return bsotel.InitOtelProvider(config)
 }
 
-// Shutdown 关闭全局 OpenTelemetry 提供者
-func Shutdown(ctx context.Context) error {
-	if globalProvider == nil {
-		return nil
-	}
-	return globalProvider.Shutdown(ctx)
+// ShutdownOtel 关闭 OpenTelemetry SDK
+func ShutdownOtel(ctx context.Context) error {
+	return bsotel.ShutdownOtelProvider(ctx)
 }
 
-// GetGlobalProvider 获取全局提供者
-func GetGlobalProvider() *Provider {
-	return globalProvider
+// GetOtelProvider 获取全局 Provider
+func GetOtelProvider() *bsotel.Provider {
+	return bsotel.GetOtelProvider()
 }
 
-// GetLoggerProvider 获取全局日志提供者
-func GetLoggerProvider() *sdklog.LoggerProvider {
-	if globalProvider != nil {
-		return globalProvider.GetLoggerProvider()
-	}
-	return global.GetLoggerProvider().(*sdklog.LoggerProvider)
-}
-
-// GetTracerProvider 获取全局追踪提供者
-func GetTracerProvider() *sdktrace.TracerProvider {
-	if globalProvider != nil {
-		return globalProvider.GetTracerProvider()
-	}
-	return otel.GetTracerProvider().(*sdktrace.TracerProvider)
-}
-
-// GetMeterProvider 获取全局指标提供者
-func GetMeterProvider() *sdkmetric.MeterProvider {
-	if globalProvider != nil {
-		return globalProvider.GetMeterProvider()
-	}
-	return otel.GetMeterProvider().(*sdkmetric.MeterProvider)
+// DefaultConfig 返回默认配置
+func DefaultConfig() *bsotel.Config {
+	return bsotel.DefaultConfig()
 }

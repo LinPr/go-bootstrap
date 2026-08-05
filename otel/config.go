@@ -1,4 +1,4 @@
-package gobootstrap
+package otel
 
 // ExporterType 定义导出器类型
 type ExporterType string
