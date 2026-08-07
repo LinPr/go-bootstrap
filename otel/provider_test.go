@@ -2,8 +2,12 @@ package otel
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 func TestNewProvider_DefaultConfig(t *testing.T) {
@@ -33,19 +37,20 @@ func TestNewProvider_StdoutExporters(t *testing.T) {
 		ServiceName:    "test-service",
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
-			Enable: true,
-			Type:   ExporterTypeStdout,
-			Pretty: true,
+			Enable:   true,
+			Exporter: ExporterTypeStdout,
+			Logger:   LoggerTypeSlog,
+			Pretty:   true,
 		},
 		Trace: TraceConfig{
 			Enable:        true,
-			Type:          ExporterTypeStdout,
+			Exporter:      ExporterTypeStdout,
 			Pretty:        true,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
 			Enable:               true,
-			Type:                 ExporterTypeStdout,
+			Exporter:             ExporterTypeStdout,
 			Pretty:               true,
 			IntervalSeconds:      10,
 			EnableRuntimeMetrics: false,
@@ -175,8 +180,9 @@ func TestCreateLogExporter_InvalidType(t *testing.T) {
 		ServiceName:    "test-service",
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
-			Enable: true,
-			Type:   "invalid",
+			Enable:   true,
+			Exporter: "invalid",
+			Logger:   LoggerTypeSlog,
 		},
 		Trace: TraceConfig{
 			Enable: false,
@@ -200,8 +206,8 @@ func TestCreateTraceExporter_InvalidType(t *testing.T) {
 			Enable: false,
 		},
 		Trace: TraceConfig{
-			Enable: true,
-			Type:   "invalid",
+			Enable:   true,
+			Exporter: "invalid",
 		},
 		Metric: MetricConfig{
 			Enable: false,
@@ -225,8 +231,8 @@ func TestCreateMetricExporter_InvalidType(t *testing.T) {
 			Enable: false,
 		},
 		Metric: MetricConfig{
-			Enable: true,
-			Type:   "invalid",
+			Enable:   true,
+			Exporter: "invalid",
 		},
 	}
 
@@ -248,7 +254,7 @@ func TestProvider_WithRuntimeMetrics(t *testing.T) {
 		},
 		Metric: MetricConfig{
 			Enable:               true,
-			Type:                 ExporterTypeStdout,
+			Exporter:             ExporterTypeStdout,
 			Pretty:               false,
 			IntervalSeconds:      5,
 			EnableRuntimeMetrics: true,
@@ -293,7 +299,7 @@ func TestProvider_DifferentSamplingRatios(t *testing.T) {
 				},
 				Trace: TraceConfig{
 					Enable:        true,
-					Type:          ExporterTypeStdout,
+					Exporter:      ExporterTypeStdout,
 					Pretty:        false,
 					SamplingRatio: tt.samplingRatio,
 				},
@@ -322,19 +328,20 @@ func TestProvider_StdoutWithoutPretty(t *testing.T) {
 		ServiceName:    "test-service",
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
-			Enable: true,
-			Type:   ExporterTypeStdout,
-			Pretty: false,
+			Enable:   true,
+			Exporter: ExporterTypeStdout,
+			Logger:   LoggerTypeSlog,
+			Pretty:   false,
 		},
 		Trace: TraceConfig{
 			Enable:        true,
-			Type:          ExporterTypeStdout,
+			Exporter:      ExporterTypeStdout,
 			Pretty:        false,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
 			Enable:          true,
-			Type:            ExporterTypeStdout,
+			Exporter:        ExporterTypeStdout,
 			Pretty:          false,
 			IntervalSeconds: 5,
 		},
@@ -365,7 +372,7 @@ func TestProvider_PrometheusExporter(t *testing.T) {
 		},
 		Metric: MetricConfig{
 			Enable:               true,
-			Type:                 ExporterTypePrometheus,
+			Exporter:             ExporterTypePrometheus,
 			EnableRuntimeMetrics: false,
 		},
 	}
@@ -384,5 +391,139 @@ func TestProvider_PrometheusExporter(t *testing.T) {
 
 	if err := provider.Shutdown(ctx); err != nil {
 		t.Errorf("failed to shutdown provider: %v", err)
+	}
+}
+
+func TestProvider_LoggerBridges(t *testing.T) {
+	tests := []struct {
+		name       string
+		loggerType LoggerType
+	}{
+		{
+			name:       "Slog Logger",
+			loggerType: LoggerTypeSlog,
+		},
+		{
+			name:       "Zap Logger",
+			loggerType: LoggerTypeZap,
+		},
+		{
+			name:       "Logrus Logger",
+			loggerType: LoggerTypeLogrus,
+		},
+		{
+			name:       "Logr Logger",
+			loggerType: LoggerTypeLogr,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				ServiceName:    "test-service",
+				ServiceVersion: "1.0.0",
+				Log: LogConfig{
+					Enable:   true,
+					Exporter: ExporterTypeStdout,
+					Logger:   tt.loggerType,
+					Pretty:   false,
+				},
+				Trace: TraceConfig{
+					Enable: false,
+				},
+				Metric: MetricConfig{
+					Enable: false,
+				},
+			}
+
+			provider, err := newProvider(config)
+			if err != nil {
+				t.Fatalf("failed to create provider with %s: %v", tt.loggerType, err)
+			}
+
+			if provider.GetLoggerProvider() == nil {
+				t.Errorf("log provider is nil for %s", tt.loggerType)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if err := provider.Shutdown(ctx); err != nil {
+				t.Errorf("failed to shutdown provider with %s: %v", tt.loggerType, err)
+			}
+		})
+	}
+}
+
+func TestProvider_LoggerBridgesWithLogging(t *testing.T) {
+	tests := []struct {
+		name       string
+		loggerType LoggerType
+		logFunc    func()
+	}{
+		{
+			name:       "Slog Logger Logging",
+			loggerType: LoggerTypeSlog,
+			logFunc: func() {
+				slog.Info("test slog message", "key", "value")
+				slog.Error("test slog error", "error", "test error")
+			},
+		},
+		{
+			name:       "Zap Logger Logging",
+			loggerType: LoggerTypeZap,
+			logFunc: func() {
+				zap.L().Info("test zap message", zap.String("key", "value"))
+				zap.L().Error("test zap error", zap.String("error", "test error"))
+			},
+		},
+		{
+			name:       "Logrus Logger Logging",
+			loggerType: LoggerTypeLogrus,
+			logFunc: func() {
+				logrus.Info("test logrus message")
+				logrus.WithField("key", "value").Info("test logrus with field")
+				logrus.Error("test logrus error")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				ServiceName:    "test-service",
+				ServiceVersion: "1.0.0",
+				Log: LogConfig{
+					Enable:   true,
+					Exporter: ExporterTypeStdout,
+					Logger:   tt.loggerType,
+					Pretty:   true,
+				},
+				Trace: TraceConfig{
+					Enable: false,
+				},
+				Metric: MetricConfig{
+					Enable: false,
+				},
+			}
+
+			provider, err := newProvider(config)
+			if err != nil {
+				t.Fatalf("failed to create provider with %s: %v", tt.loggerType, err)
+			}
+
+			// 执行日志打印测试
+			tt.logFunc()
+
+			// 等待一下让日志输出
+			time.Sleep(100 * time.Millisecond)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if err := provider.Shutdown(ctx); err != nil {
+				t.Errorf("failed to shutdown provider with %s: %v", tt.loggerType, err)
+			}
+		})
 	}
 }

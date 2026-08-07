@@ -12,6 +12,16 @@ const (
 	ExporterTypePrometheus ExporterType = "prometheus"
 )
 
+// LoggerType 定义日志桥接类型
+type LoggerType string
+
+const (
+	LoggerTypeSlog   LoggerType = "slog"   // 使用 otelslog 桥接
+	LoggerTypeZap    LoggerType = "zap"    // 使用 otelzap 桥接
+	LoggerTypeLogrus LoggerType = "logrus" // 使用 otellogrus 桥接
+	LoggerTypeLogr   LoggerType = "logr"   // 使用 otellogr 桥接
+)
+
 // Config OpenTelemetry 初始化配置
 type Config struct {
 	// ServiceName 服务名称
@@ -30,8 +40,10 @@ type Config struct {
 type LogConfig struct {
 	// Enable 是否启用日志
 	Enable bool
-	// Type 导出器类型：stdout, http, grpc
-	Type ExporterType
+	// Exporter 导出器类型：stdout, http, grpc
+	Exporter ExporterType
+	// Logger 日志桥接类型：slog, zap, logrus, logr
+	Logger LoggerType
 	// RemoteAddr 远程地址（用于 http 和 grpc）
 	RemoteAddr string
 	// Headers 请求头（用于 http 和 grpc）
@@ -44,8 +56,8 @@ type LogConfig struct {
 type TraceConfig struct {
 	// Enable 是否启用追踪
 	Enable bool
-	// Type 导出器类型：stdout, http, grpc
-	Type ExporterType
+	// Exporter 导出器类型：stdout, http, grpc
+	Exporter ExporterType
 	// RemoteAddr 远程地址（用于 http 和 grpc）
 	RemoteAddr string
 	// Headers 请求头（用于 http 和 grpc）
@@ -60,8 +72,8 @@ type TraceConfig struct {
 type MetricConfig struct {
 	// Enable 是否启用指标
 	Enable bool
-	// Type 导出器类型：stdout, http, grpc, prometheus
-	Type ExporterType
+	// Exporter 导出器类型：stdout, http, grpc, prometheus
+	Exporter ExporterType
 	// RemoteAddr 远程地址（用于 http 和 grpc）
 	RemoteAddr string
 	// Headers 请求头（用于 http 和 grpc）
@@ -80,19 +92,20 @@ func DefaultConfig() *Config {
 		ServiceName:    "default-service",
 		ServiceVersion: "0.0.0",
 		Log: LogConfig{
-			Enable: true,
-			Type:   ExporterTypeStdout,
-			Pretty: true,
+			Enable:   true,
+			Exporter: ExporterTypeStdout,
+			Logger:   LoggerTypeSlog,
+			Pretty:   true,
 		},
 		Trace: TraceConfig{
 			Enable:        true,
-			Type:          ExporterTypeStdout,
+			Exporter:      ExporterTypeStdout,
 			Pretty:        true,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
 			Enable:               true,
-			Type:                 ExporterTypeStdout,
+			Exporter:             ExporterTypeStdout,
 			Pretty:               true,
 			IntervalSeconds:      10,
 			EnableRuntimeMetrics: true,

@@ -6,7 +6,12 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogr"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
@@ -27,6 +32,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Provider OpenTelemetry 提供者
@@ -89,13 +96,12 @@ func (p *Provider) createResource(serviceName, serviceVersion string) (*resource
 
 	return resource.New(
 		context.Background(),
-		resource.WithAttributes(
+		resource.WithFromEnv(),   // 先从环境变量读取
+		resource.WithHost(),      // 添加主机信息
+		resource.WithAttributes(  // 最后设置服务信息，确保优先级最高
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
-		resource.WithService(),
-		resource.WithFromEnv(),
-		resource.WithHost(),
 		// resource.WithProcess(),
 		// resource.WithTelemetrySDK(),
 
@@ -129,20 +135,73 @@ func (p *Provider) initLog(logConfig *LogConfig, res *resource.Resource) error {
 
 	global.SetLoggerProvider(p.logProvider)
 
-	// 设置全局 slog
-	logger := otelslog.NewLogger(
-		"global",
-		otelslog.WithSource(true),
-	)
-	slog.SetDefault(logger)
+	// 根据配置的 Logger 类型设置全局日志桥接
+	if err := p.setupLoggerBridge(logConfig.Logger); err != nil {
+		return fmt.Errorf("failed to setup logger bridge: %w", err)
+	}
 
-	slog.Info("log provider initialized", "exporter", string(logConfig.Type))
+	slog.Info("log provider initialized", "exporter", string(logConfig.Exporter), "logger", string(logConfig.Logger))
+	return nil
+}
+
+// setupLoggerBridge 设置日志桥接
+func (p *Provider) setupLoggerBridge(loggerType LoggerType) error {
+	switch loggerType {
+	case LoggerTypeSlog:
+		logger := otelslog.NewLogger(
+			"global",
+			otelslog.WithLoggerProvider(p.logProvider),
+			otelslog.WithSource(true),
+		)
+		slog.SetDefault(logger)
+
+	case LoggerTypeZap:
+		logger := zap.New(
+			otelzap.NewCore(
+				"global",
+				otelzap.WithLoggerProvider(p.logProvider),
+			),
+			zap.AddCaller(),
+			zap.AddStacktrace(zapcore.ErrorLevel),
+		)
+		zap.ReplaceGlobals(logger)
+
+	case LoggerTypeLogrus:
+		logger := logrus.New()
+		hook := otellogrus.NewHook(
+			"global",
+			otellogrus.WithLoggerProvider(p.logProvider),
+		)
+		logger.AddHook(hook)
+		logger.SetLevel(logrus.InfoLevel)
+
+		// 设置为全局 logger
+		logrus.SetFormatter(logger.Formatter)
+		logrus.SetOutput(logger.Out)
+		logrus.SetLevel(logger.Level)
+		logrus.AddHook(hook)
+
+	case LoggerTypeLogr:
+		logSink := otellogr.NewLogSink(
+			"global",
+			otellogr.WithLoggerProvider(p.logProvider),
+		)
+
+		// logr 需要用户自己管理实例，这里只是创建示例
+		loggger := logr.New(logSink)
+
+		_ = loggger // 避免未使用警告，用户可以在应用中使用这个 logger
+		// otel.SetLogger(loggger)
+	default:
+		return fmt.Errorf("unsupported logger type: %s", loggerType)
+	}
+
 	return nil
 }
 
 // createLogExporter 创建日志导出器
 func (p *Provider) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
-	switch logConfig.Type {
+	switch logConfig.Exporter {
 	case ExporterTypeStdout:
 		if logConfig.Pretty {
 			return stdoutlog.New(
@@ -168,7 +227,7 @@ func (p *Provider) createLogExporter(logConfig *LogConfig) (log.Exporter, error)
 		)
 
 	default:
-		return nil, fmt.Errorf("unsupported log exporter type: %s", logConfig.Type)
+		return nil, fmt.Errorf("unsupported log exporter type: %s", logConfig.Exporter)
 	}
 }
 
@@ -192,13 +251,13 @@ func (p *Provider) initTrace(traceConfig TraceConfig, res *resource.Resource) er
 
 	otel.SetTracerProvider(p.traceProvider)
 
-	slog.Info("trace provider initialized", "exporter", string(traceConfig.Type))
+	slog.Info("trace provider initialized", "exporter", string(traceConfig.Exporter))
 	return nil
 }
 
 // createTraceExporter 创建追踪导出器
 func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
-	switch traceConfig.Type {
+	switch traceConfig.Exporter {
 	case ExporterTypeStdout:
 		if traceConfig.Pretty {
 			return stdouttrace.New(
@@ -224,7 +283,7 @@ func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
 		)
 
 	default:
-		return nil, fmt.Errorf("unsupported trace exporter type: %s", traceConfig.Type)
+		return nil, fmt.Errorf("unsupported trace exporter type: %s", traceConfig.Exporter)
 	}
 }
 
@@ -236,7 +295,7 @@ func (p *Provider) initMetric(metricConfig MetricConfig, res *resource.Resource)
 
 	var meterProvider *metric.MeterProvider
 
-	if metricConfig.Type == ExporterTypePrometheus {
+	if metricConfig.Exporter == ExporterTypePrometheus {
 		promeExporter, err := prometheus.New()
 		if err != nil {
 			return fmt.Errorf("failed to create prometheus exporter: %w", err)
@@ -276,13 +335,13 @@ func (p *Provider) initMetric(metricConfig MetricConfig, res *resource.Resource)
 		}
 	}
 
-	slog.Info("metric provider initialized", "exporter", string(metricConfig.Type))
+	slog.Info("metric provider initialized", "exporter", string(metricConfig.Exporter))
 	return nil
 }
 
 // createMetricExporter 创建指标导出器
 func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
-	switch metricConfig.Type {
+	switch metricConfig.Exporter {
 	case ExporterTypeStdout:
 		if metricConfig.Pretty {
 			return stdoutmetric.New(stdoutmetric.WithPrettyPrint())
@@ -306,7 +365,7 @@ func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
 		)
 
 	default:
-		return nil, fmt.Errorf("unsupported metric exporter type: %s", metricConfig.Type)
+		return nil, fmt.Errorf("unsupported metric exporter type: %s", metricConfig.Exporter)
 	}
 }
 

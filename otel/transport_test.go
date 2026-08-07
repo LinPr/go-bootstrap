@@ -1,0 +1,209 @@
+package otel
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+func ExampleNewOtelTransport() {
+	// Build a real HTTP server.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	// Inject OTEL transport into a real client.
+	client := &http.Client{
+		Transport: NewOtelTransport(),
+	}
+	resp, err := client.Get(srv.URL + "/ping")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println(resp.StatusCode)
+	// Output: 200
+}
+
+func ExampleNewOtelGRPCClientDialOption() {
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+
+	// Build a gRPC server with OTEL server option.
+	grpcServer := grpc.NewServer(
+		NewOtelGRPCServerOption(),
+	)
+	defer grpcServer.Stop()
+
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
+	hs.SetServingStatus("demo.v1.DemoService", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		_ = grpcServer.Serve(lis)
+	}()
+
+	dialer := func(ctx context.Context, address string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx := context.Background()
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(dialer),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		NewOtelGRPCClientDialOption(),
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	// Call the health endpoint as a complete client-side example.
+	client := healthpb.NewHealthClient(conn)
+	resp, err := client.Check(ctx, &healthpb.HealthCheckRequest{Service: "demo.v1.DemoService"})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(resp.Status.String())
+	// Output: SERVING
+}
+
+func ExampleNewOtelGRPCServerOption() {
+	// Server-only initialization example.
+	server := grpc.NewServer(
+		NewOtelGRPCServerOption(),
+	)
+	defer server.Stop()
+
+	fmt.Println(server != nil)
+	// Output: true
+}
+
+func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
+
+	globalProvider = nil
+
+	config := &Config{
+		ServiceName:    "transport-e2e",
+		ServiceVersion: "1.0.0",
+		Log: LogConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "vnet-bff-dev",
+			},
+			Logger: LoggerTypeSlog,
+			Pretty: false,
+		},
+		Trace: TraceConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "vnet-bff-dev",
+			},
+			SamplingRatio: 1.0,
+		},
+		Metric: MetricConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "vnet-bff-dev",
+			},
+			IntervalSeconds:      1,
+			EnableRuntimeMetrics: true,
+		},
+	}
+
+	if err := InitOtelProvider(config); err != nil {
+		t.Fatalf("failed to init provider: %v", err)
+	}
+
+	// 1) Trigger log provider
+	slog.Info("transport e2e log", "case", "transport-and-grpc")
+
+	// 2) Trigger HTTP transport instrumentation
+	httpTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer httpTarget.Close()
+
+	httpClient := &http.Client{Transport: NewOtelTransport()}
+	httpResp, err := httpClient.Get(httpTarget.URL + "/ping")
+	if err != nil {
+		t.Fatalf("http request failed: %v", err)
+	}
+	_ = httpResp.Body.Close()
+
+	// 3) Trigger gRPC client/server instrumentation
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+
+	grpcServer := grpc.NewServer(NewOtelGRPCServerOption())
+	defer grpcServer.Stop()
+
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
+	hs.SetServingStatus("demo.v1.DemoService", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		_ = grpcServer.Serve(lis)
+	}()
+
+	dialer := func(ctx context.Context, address string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(dialer),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		NewOtelGRPCClientDialOption(),
+	)
+	if err != nil {
+		t.Fatalf("grpc dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	grpcClient := healthpb.NewHealthClient(conn)
+	if _, err := grpcClient.Check(ctx, &healthpb.HealthCheckRequest{Service: "demo.v1.DemoService"}); err != nil {
+		t.Fatalf("grpc health check failed: %v", err)
+	}
+
+	// Wait for periodic metric export and flush all providers.
+	time.Sleep(2 * time.Second)
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := ShutdownOtelProvider(shutdownCtx); err != nil {
+		t.Fatalf("shutdown failed: %v", err)
+	}
+	globalProvider = nil
+
+	t.Log("telemetry emitted to remote OTLP HTTP collector; verify logs/traces/metrics in backend")
+}

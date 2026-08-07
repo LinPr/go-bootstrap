@@ -17,8 +17,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("log should be enabled by default")
 	}
 
-	if config.Log.Type != ExporterTypeStdout {
-		t.Errorf("expected log type '%s', got '%s'", ExporterTypeStdout, config.Log.Type)
+	if config.Log.Exporter != ExporterTypeStdout {
+		t.Errorf("expected log type '%s', got '%s'", ExporterTypeStdout, config.Log.Exporter)
 	}
 
 	if !config.Trace.Enable {
@@ -69,11 +69,11 @@ func TestConfigModification(t *testing.T) {
 	// Modify config
 	config.ServiceName = "my-service"
 	config.ServiceVersion = "1.2.3"
-	config.Log.Type = ExporterTypeHTTP
+	config.Log.Exporter = ExporterTypeHTTP
 	config.Log.RemoteAddr = "http://localhost:4318"
-	config.Trace.Type = ExporterTypeGRPC
+	config.Trace.Exporter = ExporterTypeGRPC
 	config.Trace.RemoteAddr = "localhost:4317"
-	config.Metric.Type = ExporterTypePrometheus
+	config.Metric.Exporter = ExporterTypePrometheus
 
 	// Verify modifications
 	if config.ServiceName != "my-service" {
@@ -84,15 +84,15 @@ func TestConfigModification(t *testing.T) {
 		t.Errorf("failed to modify service version")
 	}
 
-	if config.Log.Type != ExporterTypeHTTP {
+	if config.Log.Exporter != ExporterTypeHTTP {
 		t.Errorf("failed to modify log type")
 	}
 
-	if config.Trace.Type != ExporterTypeGRPC {
+	if config.Trace.Exporter != ExporterTypeGRPC {
 		t.Errorf("failed to modify trace type")
 	}
 
-	if config.Metric.Type != ExporterTypePrometheus {
+	if config.Metric.Exporter != ExporterTypePrometheus {
 		t.Errorf("failed to modify metric type")
 	}
 }
