@@ -2,10 +2,15 @@ package otel
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 )
@@ -384,6 +389,38 @@ func TestProvider_PrometheusExporter(t *testing.T) {
 
 	if provider.GetMeterProvider() == nil {
 		t.Error("meter provider is nil for prometheus")
+	}
+
+	// Emit a metric so the scrape endpoint has concrete series data.
+	meter := provider.GetMeterProvider().Meter("test-prometheus-meter")
+	counter, err := meter.Int64Counter("bootstrap_prometheus_test_counter")
+	if err != nil {
+		t.Fatalf("failed to create counter: %v", err)
+	}
+	counter.Add(context.Background(), 1)
+
+	// Expose default Prometheus registry through an HTTP endpoint and scrape it.
+	server := httptest.NewServer(promhttp.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatalf("failed to scrape prometheus endpoint: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code from prometheus endpoint: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read prometheus response body: %v", err)
+	}
+
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, "bootstrap_prometheus_test_counter") {
+		t.Fatalf("expected scraped metrics to include test counter, got body: %s", bodyStr)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

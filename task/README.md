@@ -32,18 +32,14 @@ func main() {
 
 	for i := 0; i < 10; i++ {
 		v := i
-		pool.Submit(func(ctx context.Context) (int, error) {
-			return v * 2, nil
+		pool.Submit(func(ctx context.Context) int {
+			return v * 2
 		})
 	}
 
 	results := pool.Run(context.Background())
-	for i, r := range results {
-		if r.Err != nil {
-			fmt.Printf("task %d failed: %v\n", i, r.Err)
-			continue
-		}
-		fmt.Printf("task %d => %d\n", i, r.Value)
+	for i, v := range results {
+		fmt.Printf("task %d => %d\n", i, v)
 	}
 }
 ```
