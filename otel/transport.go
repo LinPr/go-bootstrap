@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func NewOtelTransport() *otelhttp.Transport {
+func NewOtelHttpTransport() *otelhttp.Transport {
 	return otelhttp.NewTransport(
 		http.DefaultTransport,
 		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {

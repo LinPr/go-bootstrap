@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func ExampleNewOtelTransport() {
+func ExampleNewOtelHttpTransport() {
 	// Build a real HTTP server.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -27,7 +27,7 @@ func ExampleNewOtelTransport() {
 
 	// Inject OTEL transport into a real client.
 	client := &http.Client{
-		Transport: NewOtelTransport(),
+		Transport: NewOtelHttpTransport(),
 	}
 	resp, err := client.Get(srv.URL + "/ping")
 	if err != nil {
@@ -150,7 +150,7 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 	}))
 	defer httpTarget.Close()
 
-	httpClient := &http.Client{Transport: NewOtelTransport()}
+	httpClient := &http.Client{Transport: NewOtelHttpTransport()}
 	httpResp, err := httpClient.Get(httpTarget.URL + "/ping")
 	if err != nil {
 		t.Fatalf("http request failed: %v", err)
