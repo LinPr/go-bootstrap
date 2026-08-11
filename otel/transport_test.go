@@ -40,13 +40,13 @@ func ExampleNewOtelHttpTransport() {
 	// Output: 200
 }
 
-func ExampleNewOtelGRPCClientDialOption() {
+func ExampleWithOtelGRPCClientOption() {
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
 
 	// Build a gRPC server with OTEL server option.
 	grpcServer := grpc.NewServer(
-		NewOtelGRPCServerOption(),
+		WithOtelGRPCServerOption(),
 	)
 	defer grpcServer.Stop()
 
@@ -67,7 +67,7 @@ func ExampleNewOtelGRPCClientDialOption() {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		NewOtelGRPCClientDialOption(),
+		WithOtelGRPCClientOption(),
 	)
 	if err != nil {
 		panic(err)
@@ -85,10 +85,10 @@ func ExampleNewOtelGRPCClientDialOption() {
 	// Output: SERVING
 }
 
-func ExampleNewOtelGRPCServerOption() {
+func ExampleWithOtelGRPCServerOption() {
 	// Server-only initialization example.
 	server := grpc.NewServer(
-		NewOtelGRPCServerOption(),
+		WithOtelGRPCServerOption(),
 	)
 	defer server.Stop()
 
@@ -157,7 +157,7 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
 
-	grpcServer := grpc.NewServer(NewOtelGRPCServerOption())
+	grpcServer := grpc.NewServer(WithOtelGRPCServerOption())
 	defer grpcServer.Stop()
 
 	hs := health.NewServer()
@@ -179,7 +179,7 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		NewOtelGRPCClientDialOption(),
+		WithOtelGRPCClientOption(),
 	)
 	if err != nil {
 		t.Fatalf("grpc dial failed: %v", err)

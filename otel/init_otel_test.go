@@ -216,7 +216,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
 	grpcServer := grpc.NewServer(
-		NewOtelGRPCServerOption(),
+		WithOtelGRPCServerOption(),
 		grpc.UnaryInterceptor(grpcUnaryHandler),
 	)
 	hs := health.NewServer()
@@ -238,7 +238,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		NewOtelGRPCClientDialOption(),
+		WithOtelGRPCClientOption(),
 	)
 	if err != nil {
 		t.Fatalf("grpc dial failed: %v", err)

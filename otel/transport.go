@@ -18,14 +18,14 @@ func NewOtelHttpTransport() *otelhttp.Transport {
 	)
 }
 
-// NewOtelGRPCClientDialOption returns a gRPC dial option that enables OTEL
+// WithOtelGRPCClientOption returns a gRPC dial option that enables OTEL
 // client-side instrumentation.
-func NewOtelGRPCClientDialOption(opts ...otelgrpc.Option) grpc.DialOption {
+func WithOtelGRPCClientOption(opts ...otelgrpc.Option) grpc.DialOption {
 	return grpc.WithStatsHandler(otelgrpc.NewClientHandler(opts...))
 }
 
-// NewOtelGRPCServerOption returns a gRPC server option that enables OTEL
+// WithOtelGRPCServerOption returns a gRPC server option that enables OTEL
 // server-side instrumentation.
-func NewOtelGRPCServerOption(opts ...otelgrpc.Option) grpc.ServerOption {
+func WithOtelGRPCServerOption(opts ...otelgrpc.Option) grpc.ServerOption {
 	return grpc.StatsHandler(otelgrpc.NewServerHandler(opts...))
 }
