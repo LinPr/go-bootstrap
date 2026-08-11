@@ -9,18 +9,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var globalProvider *Provider
+var globalProvider *OtelProviders
 
-// Initialize 使用提供的配置初始化 OpenTelemetry SDK
-// 这是一个便捷方法，会设置全局提供者
-func InitOtelProvider(config *Config) error {
-	provider, err := newProvider(config)
+// NewOtelProviders 使用提供的配置初始化 OpenTelemetry SDK。
+// 这是一个便捷方法，会设置并返回全局提供者。
+func NewOtelProviders(config *Config) (*OtelProviders, error) {
+	providers, err := newOtelProviders(config)
 	if err != nil {
-		return fmt.Errorf("failed to create provider: %w", err)
+		return nil, fmt.Errorf("failed to create provider: %w", err)
 	}
 
-	globalProvider = provider
-	return nil
+	globalProvider = providers
+	return providers, nil
 }
 
 // Shutdown 关闭全局 OpenTelemetry 提供者
@@ -31,22 +31,22 @@ func ShutdownOtelProvider(ctx context.Context) error {
 	return globalProvider.Shutdown(ctx)
 }
 
-// GetGlobalProvider 获取全局提供者
-func GetOtelProvider() *Provider {
+// GetOtelProvider 获取全局提供者。
+func GetOtelProvider() *OtelProviders {
 	return globalProvider
 }
 
 // GetLoggerProvider 获取日志提供者
-func (p *Provider) GetLoggerProvider() log.LoggerProvider {
+func (p *OtelProviders) GetLoggerProvider() log.LoggerProvider {
 	return p.logProvider
 }
 
 // GetTracerProvider 获取追踪提供者
-func (p *Provider) GetTracerProvider() trace.TracerProvider {
+func (p *OtelProviders) GetTracerProvider() trace.TracerProvider {
 	return p.traceProvider
 }
 
 // GetMeterProvider 获取指标提供者
-func (p *Provider) GetMeterProvider() metric.MeterProvider {
+func (p *OtelProviders) GetMeterProvider() metric.MeterProvider {
 	return p.metricProvider
 }

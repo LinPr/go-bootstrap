@@ -37,19 +37,19 @@ import (
 )
 
 // Provider OpenTelemetry 提供者
-type Provider struct {
+type OtelProviders struct {
 	logProvider    *log.LoggerProvider
 	traceProvider  *trace.TracerProvider
 	metricProvider *metric.MeterProvider
 }
 
-// NewProvider 创建一个新的 OpenTelemetry 提供者
-func newProvider(config *Config) (*Provider, error) {
+// newOtelProviders 创建一个新的 OpenTelemetry 提供者
+func newOtelProviders(config *Config) (*OtelProviders, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
 
-	p := &Provider{
+	p := &OtelProviders{
 		logProvider:    nil,
 		traceProvider:  nil,
 		metricProvider: nil,
@@ -63,7 +63,7 @@ func newProvider(config *Config) (*Provider, error) {
 }
 
 // initialize 初始化 OpenTelemetry SDK
-func (p *Provider) initialize(c *Config) error {
+func (p *OtelProviders) initialize(c *Config) error {
 	// 设置上下文传播器
 	p.initPropagator()
 
@@ -92,13 +92,13 @@ func (p *Provider) initialize(c *Config) error {
 }
 
 // createResource 创建 OpenTelemetry 资源
-func (p *Provider) createResource(serviceName, serviceVersion string) (*resource.Resource, error) {
+func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*resource.Resource, error) {
 
 	return resource.New(
 		context.Background(),
-		resource.WithFromEnv(),   // 先从环境变量读取
-		resource.WithHost(),      // 添加主机信息
-		resource.WithAttributes(  // 最后设置服务信息，确保优先级最高
+		resource.WithFromEnv(), // 先从环境变量读取
+		resource.WithHost(),    // 添加主机信息
+		resource.WithAttributes( // 最后设置服务信息，确保优先级最高
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
@@ -109,7 +109,7 @@ func (p *Provider) createResource(serviceName, serviceVersion string) (*resource
 }
 
 // initPropagator 初始化传播器
-func (p *Provider) initPropagator() {
+func (p *OtelProviders) initPropagator() {
 	prop := propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -118,7 +118,7 @@ func (p *Provider) initPropagator() {
 }
 
 // initLog 初始化日志提供者
-func (p *Provider) initLog(logConfig *LogConfig, res *resource.Resource) error {
+func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) error {
 	if !logConfig.Enable {
 		return nil
 	}
@@ -145,7 +145,7 @@ func (p *Provider) initLog(logConfig *LogConfig, res *resource.Resource) error {
 }
 
 // setupLoggerBridge 设置日志桥接
-func (p *Provider) setupLoggerBridge(loggerType LoggerType) error {
+func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType) error {
 	switch loggerType {
 	case LoggerTypeSlog:
 		logger := otelslog.NewLogger(
@@ -200,7 +200,7 @@ func (p *Provider) setupLoggerBridge(loggerType LoggerType) error {
 }
 
 // createLogExporter 创建日志导出器
-func (p *Provider) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
+func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
 	case ExporterTypeStdout:
 		if logConfig.Pretty {
@@ -232,7 +232,7 @@ func (p *Provider) createLogExporter(logConfig *LogConfig) (log.Exporter, error)
 }
 
 // initTrace 初始化追踪提供者
-func (p *Provider) initTrace(traceConfig TraceConfig, res *resource.Resource) error {
+func (p *OtelProviders) initTrace(traceConfig TraceConfig, res *resource.Resource) error {
 	if !traceConfig.Enable {
 		return nil
 	}
@@ -288,7 +288,7 @@ func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
 }
 
 // initMetric 初始化指标提供者
-func (p *Provider) initMetric(metricConfig MetricConfig, res *resource.Resource) error {
+func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Resource) error {
 	if !metricConfig.Enable {
 		return nil
 	}
@@ -370,7 +370,7 @@ func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
 }
 
 // Shutdown 关闭所有提供者
-func (p *Provider) Shutdown(ctx context.Context) error {
+func (p *OtelProviders) Shutdown(ctx context.Context) error {
 	var errors []error
 
 	if p.logProvider != nil {

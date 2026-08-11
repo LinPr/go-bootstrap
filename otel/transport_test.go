@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -99,44 +100,39 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 
 	globalProvider = nil
 
+	var receivedRequests int32
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&receivedRequests, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer collector.Close()
+
 	config := &Config{
 		ServiceName:    "transport-e2e",
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
 			Enable:     true,
 			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "vnet-bff-dev",
-			},
-			Logger: LoggerTypeSlog,
-			Pretty: false,
+			RemoteAddr: collector.URL,
+			Logger:     LoggerTypeSlog,
+			Pretty:     false,
 		},
 		Trace: TraceConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "vnet-bff-dev",
-			},
+			Enable:        true,
+			Exporter:      ExporterTypeHTTP,
+			RemoteAddr:    collector.URL,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "vnet-bff-dev",
-			},
+			Enable:               true,
+			Exporter:             ExporterTypeHTTP,
+			RemoteAddr:           collector.URL,
 			IntervalSeconds:      1,
 			EnableRuntimeMetrics: true,
 		},
 	}
 
-	if err := InitOtelProvider(config); err != nil {
+	if _, err := NewOtelProviders(config); err != nil {
 		t.Fatalf("failed to init provider: %v", err)
 	}
 
@@ -204,6 +200,10 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 		t.Fatalf("shutdown failed: %v", err)
 	}
 	globalProvider = nil
+
+	if atomic.LoadInt32(&receivedRequests) == 0 {
+		t.Fatal("expected the local collector to receive at least one OTLP request")
+	}
 
 	t.Log("telemetry emitted to remote OTLP HTTP collector; verify logs/traces/metrics in backend")
 }
