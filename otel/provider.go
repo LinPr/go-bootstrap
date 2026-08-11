@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -24,6 +25,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
@@ -129,14 +132,18 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 	}
 
 	p.logProvider = log.NewLoggerProvider(
-		log.WithProcessor(log.NewBatchProcessor(logExporter)),
+		log.WithProcessor(
+			log.NewBatchProcessor(
+				logExporter,
+			),
+		),
 		log.WithResource(res),
 	)
 
 	global.SetLoggerProvider(p.logProvider)
 
 	// 根据配置的 Logger 类型设置全局日志桥接
-	if err := p.setupLoggerBridge(logConfig.Logger); err != nil {
+	if err := p.setupLoggerBridge(logConfig.Logger, logConfig.Level); err != nil {
 		return fmt.Errorf("failed to setup logger bridge: %w", err)
 	}
 
@@ -145,15 +152,33 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 }
 
 // setupLoggerBridge 设置日志桥接
-func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType) error {
+func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) error {
+	slogLevel, zapLevel, logrusLevel, err := parseLogLevel(level)
+	if err != nil {
+		return err
+	}
+
 	switch loggerType {
 	case LoggerTypeSlog:
-		logger := otelslog.NewLogger(
+
+		handler := otelslog.NewHandler(
 			"global",
-			otelslog.WithLoggerProvider(p.logProvider),
-			otelslog.WithSource(true),
+			otelslog.WithLoggerProvider(otelLogProvider{
+				LoggerProvider: p.logProvider,
+				MinSeverity:    otellog.Severity(slogLevel),
+			}),
 		)
-		slog.SetDefault(logger)
+
+		slog.SetDefault(
+			slog.New(handler),
+		)
+
+		// logger := otelslog.NewLogger(
+		// 	"global",
+		// 	otelslog.WithLoggerProvider(p.logProvider),
+		// 	otelslog.WithSource(true),
+		// )
+		// slog.SetDefault(logger)
 
 	case LoggerTypeZap:
 		logger := zap.New(
@@ -161,6 +186,7 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType) error {
 				"global",
 				otelzap.WithLoggerProvider(p.logProvider),
 			),
+			zap.IncreaseLevel(zapLevel),
 			zap.AddCaller(),
 			zap.AddStacktrace(zapcore.ErrorLevel),
 		)
@@ -173,7 +199,7 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType) error {
 			otellogrus.WithLoggerProvider(p.logProvider),
 		)
 		logger.AddHook(hook)
-		logger.SetLevel(logrus.InfoLevel)
+		logger.SetLevel(logrusLevel)
 
 		// 设置为全局 logger
 		logrus.SetFormatter(logger.Formatter)
@@ -191,12 +217,33 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType) error {
 		loggger := logr.New(logSink)
 
 		_ = loggger // 避免未使用警告，用户可以在应用中使用这个 logger
+		_ = level   // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
 		// otel.SetLogger(loggger)
 	default:
 		return fmt.Errorf("unsupported logger type: %s", loggerType)
 	}
 
 	return nil
+}
+
+func parseLogLevel(level string) (otellog.Severity, zapcore.Level, logrus.Level, error) {
+	normalized := strings.ToLower(strings.TrimSpace(level))
+	if normalized == "" {
+		normalized = "info"
+	}
+
+	switch normalized {
+	case "debug":
+		return otellog.SeverityDebug, zapcore.DebugLevel, logrus.DebugLevel, nil
+	case "info":
+		return otellog.SeverityInfo, zapcore.InfoLevel, logrus.InfoLevel, nil
+	case "warn":
+		return otellog.SeverityWarn, zapcore.WarnLevel, logrus.WarnLevel, nil
+	case "error":
+		return otellog.SeverityError, zapcore.ErrorLevel, logrus.ErrorLevel, nil
+	default:
+		return 0, 0, 0, fmt.Errorf("unsupported log level: %s", level)
+	}
 }
 
 // createLogExporter 创建日志导出器

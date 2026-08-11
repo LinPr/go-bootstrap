@@ -21,6 +21,10 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("expected log type '%s', got '%s'", ExporterTypeStdout, config.Log.Exporter)
 	}
 
+	if config.Log.Level != "info" {
+		t.Errorf("expected log level 'info', got '%s'", config.Log.Level)
+	}
+
 	if !config.Trace.Enable {
 		t.Error("trace should be enabled by default")
 	}

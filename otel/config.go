@@ -44,6 +44,8 @@ type LogConfig struct {
 	Exporter ExporterType
 	// Logger 日志桥接类型：slog, zap, logrus, logr
 	Logger LoggerType
+	// Level 日志级别: debug, info, warn, error
+	Level string
 	// RemoteAddr 远程地址（用于 http 和 grpc）
 	RemoteAddr string
 	// Headers 请求头（用于 http 和 grpc）
@@ -95,6 +97,7 @@ func DefaultConfig() *Config {
 			Enable:   true,
 			Exporter: ExporterTypeStdout,
 			Logger:   LoggerTypeSlog,
+			Level:    "info",
 			Pretty:   true,
 		},
 		Trace: TraceConfig{

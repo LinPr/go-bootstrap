@@ -95,6 +95,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 			Enable:     true,
 			Exporter:   ExporterTypeHTTP,
 			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+			Level:      "error",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "test",
@@ -306,24 +307,28 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ctx context.Context, phase string) {
 	t.Helper()
 
-	message := phase + " telemetry check"
+	message := string(loggerType) + ": " + phase + " telemetry check"
 
 	switch loggerType {
 	case LoggerTypeSlog:
-		slog.InfoContext(ctx, message, "phase", phase)
+		slog.DebugContext(ctx, message+" debug", "phase", phase)
+		slog.InfoContext(ctx, message+" info", "phase", phase)
 		slog.WarnContext(ctx, message+" warn", "phase", phase)
 		slog.ErrorContext(ctx, message+" error", "phase", phase)
 	case LoggerTypeZap:
-		zap.L().Info(message, zap.Any("context", ctx), zap.String("phase", phase))
+		zap.L().Debug(message+" debug", zap.Any("context", ctx), zap.String("phase", phase))
+		zap.L().Info(message+" info", zap.Any("context", ctx), zap.String("phase", phase))
 		zap.L().Warn(message+" warn", zap.Any("context", ctx), zap.String("phase", phase))
 		zap.L().Error(message+" error", zap.Any("context", ctx), zap.String("phase", phase))
 	case LoggerTypeLogrus:
-		logrus.WithContext(ctx).WithField("phase", phase).Info(message)
+		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
+		logrus.WithContext(ctx).WithField("phase", phase).Info(message + " info")
 		logrus.WithContext(ctx).WithField("phase", phase).Warn(message + " warn")
 		logrus.WithContext(ctx).WithField("phase", phase).Error(message + " error")
 	case LoggerTypeLogr:
 		logger := logr.New(otellogr.NewLogSink("integration", otellogr.WithLoggerProvider(provider.GetLoggerProvider())))
-		logger.WithValues("context", ctx, "phase", phase).Info(message)
+		logger.WithValues("context", ctx, "phase", phase).V(1).Info(message + " debug")
+		logger.WithValues("context", ctx, "phase", phase).Info(message + " info")
 		logger.WithValues("context", ctx, "phase", phase).Error(fmt.Errorf("synthetic error"), message+" error")
 	default:
 		t.Fatalf("unsupported logger type: %s", loggerType)
