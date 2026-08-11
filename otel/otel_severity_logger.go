@@ -2,11 +2,15 @@ package otel
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/sirupsen/logrus"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.uber.org/zap/zapcore"
 )
 
-// 继承 otellog.LoggerProvider 并添加全局日志级别
+// otelLogProvider embeds otellog.LoggerProvider and adds a global severity floor.
 type otelLogProvider struct {
 	otellog.LoggerProvider
 	MinSeverity otellog.Severity
@@ -35,4 +39,25 @@ func (l otelSeverityLogger) Enabled(ctx context.Context, param otellog.EnabledPa
 		return false
 	}
 	return l.Logger.Enabled(ctx, param)
+}
+
+func parseLogLevel(level string) (otellog.Severity, zapcore.Level, logrus.Level, error) {
+	// Normalize the level string to lowercase and trim whitespace for comparison.
+	normalized := strings.ToLower(strings.TrimSpace(level))
+	if normalized == "" {
+		normalized = "info"
+	}
+
+	switch normalized {
+	case "debug":
+		return otellog.SeverityDebug, zapcore.DebugLevel, logrus.DebugLevel, nil
+	case "info":
+		return otellog.SeverityInfo, zapcore.InfoLevel, logrus.InfoLevel, nil
+	case "warn":
+		return otellog.SeverityWarn, zapcore.WarnLevel, logrus.WarnLevel, nil
+	case "error":
+		return otellog.SeverityError, zapcore.ErrorLevel, logrus.ErrorLevel, nil
+	default:
+		return 0, 0, 0, fmt.Errorf("unsupported log level: %s", level)
+	}
 }

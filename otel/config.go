@@ -1,6 +1,6 @@
 package otel
 
-// ExporterType 定义导出器类型
+// ExporterType defines exporter types.
 type ExporterType string
 
 const (
@@ -8,87 +8,87 @@ const (
 	ExporterTypeHTTP   ExporterType = "http"
 	ExporterTypeGRPC   ExporterType = "grpc"
 
-	// ExporterTypePrometheus Prometheus 导出器（仅用于 Metric）
+	// ExporterTypePrometheus is the Prometheus exporter (Metric only).
 	ExporterTypePrometheus ExporterType = "prometheus"
 )
 
-// LoggerType 定义日志桥接类型
+// LoggerType defines log bridge types.
 type LoggerType string
 
 const (
-	LoggerTypeSlog   LoggerType = "slog"   // 使用 otelslog 桥接
-	LoggerTypeZap    LoggerType = "zap"    // 使用 otelzap 桥接
-	LoggerTypeLogrus LoggerType = "logrus" // 使用 otellogrus 桥接
-	LoggerTypeLogr   LoggerType = "logr"   // 使用 otellogr 桥接
+	LoggerTypeSlog   LoggerType = "slog"   // Uses the otelslog bridge.
+	LoggerTypeZap    LoggerType = "zap"    // Uses the otelzap bridge.
+	LoggerTypeLogrus LoggerType = "logrus" // Uses the otellogrus bridge.
+	LoggerTypeLogr   LoggerType = "logr"   // Uses the otellogr bridge.
 )
 
-// Config OpenTelemetry 初始化配置
+// Config holds the OpenTelemetry initialization config.
 type Config struct {
-	// ServiceName 服务名称
+	// ServiceName is the service name.
 	ServiceName string
-	// ServiceVersion 服务版本
+	// ServiceVersion is the service version.
 	ServiceVersion string
-	// Log 日志配置
+	// Log is the log configuration.
 	Log LogConfig
-	// Trace 追踪配置
+	// Trace is the trace configuration.
 	Trace TraceConfig
-	// Metric 指标配置
+	// Metric is the metric configuration.
 	Metric MetricConfig
 }
 
-// LogConfig 日志配置
+// LogConfig holds log settings.
 type LogConfig struct {
-	// Enable 是否启用日志
+	// Enable toggles logging.
 	Enable bool
-	// Exporter 导出器类型：stdout, http, grpc
+	// Exporter is the exporter type: stdout, http, grpc.
 	Exporter ExporterType
-	// Logger 日志桥接类型：slog, zap, logrus, logr
+	// Logger is the log bridge type: slog, zap, logrus, logr.
 	Logger LoggerType
-	// Level 日志级别: debug, info, warn, error
+	// Level is the log level: debug, info, warn, error.
 	Level string
-	// RemoteAddr 远程地址（用于 http 和 grpc）
+	// RemoteAddr is the remote address for HTTP and gRPC.
 	RemoteAddr string
-	// Headers 请求头（用于 http 和 grpc）
+	// Headers contains request headers for HTTP and gRPC.
 	Headers map[string]string
-	// Pretty 是否美化输出（仅用于 stdout）
+	// Pretty enables pretty output for stdout only.
 	Pretty bool
 }
 
-// TraceConfig 追踪配置
+// TraceConfig holds trace settings.
 type TraceConfig struct {
-	// Enable 是否启用追踪
+	// Enable toggles tracing.
 	Enable bool
-	// Exporter 导出器类型：stdout, http, grpc
+	// Exporter is the exporter type: stdout, http, grpc.
 	Exporter ExporterType
-	// RemoteAddr 远程地址（用于 http 和 grpc）
+	// RemoteAddr is the remote address for HTTP and gRPC.
 	RemoteAddr string
-	// Headers 请求头（用于 http 和 grpc）
+	// Headers contains request headers for HTTP and gRPC.
 	Headers map[string]string
-	// Pretty 是否美化输出（仅用于 stdout）
+	// Pretty enables pretty output for stdout only.
 	Pretty bool
-	// SamplingRatio 采样率（0.0 到 1.0）
+	// SamplingRatio is the sampling ratio, from 0.0 to 1.0.
 	SamplingRatio float64
 }
 
-// MetricConfig 指标配置
+// MetricConfig holds metric settings.
 type MetricConfig struct {
-	// Enable 是否启用指标
+	// Enable toggles metrics.
 	Enable bool
-	// Exporter 导出器类型：stdout, http, grpc, prometheus
+	// Exporter is the exporter type: stdout, http, grpc, prometheus.
 	Exporter ExporterType
-	// RemoteAddr 远程地址（用于 http 和 grpc）
+	// RemoteAddr is the remote address for HTTP and gRPC.
 	RemoteAddr string
-	// Headers 请求头（用于 http 和 grpc）
+	// Headers contains request headers for HTTP and gRPC.
 	Headers map[string]string
-	// Pretty 是否美化输出（仅用于 stdout）
+	// Pretty enables pretty output for stdout only.
 	Pretty bool
-	// IntervalSeconds 指标上报间隔（秒）
+	// IntervalSeconds is the metric export interval in seconds.
 	IntervalSeconds int
-	// EnableRuntimeMetrics 是否启用 Go Runtime 指标
+	// EnableRuntimeMetrics toggles Go runtime metrics.
 	EnableRuntimeMetrics bool
 }
 
-// DefaultConfig 返回默认配置
+// DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
 		ServiceName:    "default-service",

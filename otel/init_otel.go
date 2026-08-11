@@ -11,8 +11,8 @@ import (
 
 var globalProvider *OtelProviders
 
-// NewOtelProviders 使用提供的配置初始化 OpenTelemetry SDK。
-// 这是一个便捷方法，会设置并返回全局提供者。
+// NewOtelProviders initializes the OpenTelemetry SDK with the provided config.
+// It is a convenience helper that sets and returns the global providers.
 func NewOtelProviders(config *Config) (*OtelProviders, error) {
 	providers, err := newOtelProviders(config)
 	if err != nil {
@@ -23,7 +23,7 @@ func NewOtelProviders(config *Config) (*OtelProviders, error) {
 	return providers, nil
 }
 
-// Shutdown 关闭全局 OpenTelemetry 提供者
+// Shutdown closes the global OpenTelemetry providers.
 func ShutdownOtelProvider(ctx context.Context) error {
 	if globalProvider == nil {
 		return nil
@@ -31,22 +31,22 @@ func ShutdownOtelProvider(ctx context.Context) error {
 	return globalProvider.Shutdown(ctx)
 }
 
-// GetOtelProvider 获取全局提供者。
+// GetOtelProvider returns the global providers.
 func GetOtelProvider() *OtelProviders {
 	return globalProvider
 }
 
-// GetLoggerProvider 获取日志提供者
+// GetLoggerProvider returns the log provider.
 func (p *OtelProviders) GetLoggerProvider() log.LoggerProvider {
 	return p.logProvider
 }
 
-// GetTracerProvider 获取追踪提供者
+// GetTracerProvider returns the trace provider.
 func (p *OtelProviders) GetTracerProvider() trace.TracerProvider {
 	return p.traceProvider
 }
 
-// GetMeterProvider 获取指标提供者
+// GetMeterProvider returns the metric provider.
 func (p *OtelProviders) GetMeterProvider() metric.MeterProvider {
 	return p.metricProvider
 }

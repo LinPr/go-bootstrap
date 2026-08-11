@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -39,14 +38,14 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Provider OpenTelemetry 提供者
+// OtelProviders holds the OpenTelemetry providers.
 type OtelProviders struct {
 	logProvider    *log.LoggerProvider
 	traceProvider  *trace.TracerProvider
 	metricProvider *metric.MeterProvider
 }
 
-// newOtelProviders 创建一个新的 OpenTelemetry 提供者
+// newOtelProviders creates a new OpenTelemetry provider set.
 func newOtelProviders(config *Config) (*OtelProviders, error) {
 	if config == nil {
 		config = DefaultConfig()
@@ -65,28 +64,28 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 	return p, nil
 }
 
-// initialize 初始化 OpenTelemetry SDK
+// initialize initializes the OpenTelemetry SDK.
 func (p *OtelProviders) initialize(c *Config) error {
-	// 设置上下文传播器
+	// Set up context propagation.
 	p.initPropagator()
 
-	// 创建资源
+	// Create the resource.
 	res, err := p.createResource(c.ServiceName, c.ServiceVersion)
 	if err != nil {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// 初始化 Log
+	// Initialize logs.
 	if err := p.initLog(&c.Log, res); err != nil {
 		return fmt.Errorf("failed to initialize log provider: %w", err)
 	}
 
-	// 初始化 Trace
+	// Initialize traces.
 	if err := p.initTrace(c.Trace, res); err != nil {
 		return fmt.Errorf("failed to initialize trace provider: %w", err)
 	}
 
-	// 初始化 Metric
+	// Initialize metrics.
 	if err := p.initMetric(c.Metric, res); err != nil {
 		return fmt.Errorf("failed to initialize metric provider: %w", err)
 	}
@@ -94,14 +93,14 @@ func (p *OtelProviders) initialize(c *Config) error {
 	return nil
 }
 
-// createResource 创建 OpenTelemetry 资源
+// createResource creates an OpenTelemetry resource.
 func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*resource.Resource, error) {
 
 	return resource.New(
 		context.Background(),
-		resource.WithFromEnv(), // 先从环境变量读取
-		resource.WithHost(),    // 添加主机信息
-		resource.WithAttributes( // 最后设置服务信息，确保优先级最高
+		resource.WithFromEnv(), // Read environment variables first.
+		resource.WithHost(),    // Add host information.
+		resource.WithAttributes( // Set service information last so it wins.
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
@@ -111,7 +110,7 @@ func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*res
 	)
 }
 
-// initPropagator 初始化传播器
+// initPropagator initializes the propagator.
 func (p *OtelProviders) initPropagator() {
 	prop := propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
@@ -120,7 +119,7 @@ func (p *OtelProviders) initPropagator() {
 	otel.SetTextMapPropagator(prop)
 }
 
-// initLog 初始化日志提供者
+// initLog initializes the log provider.
 func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) error {
 	if !logConfig.Enable {
 		return nil
@@ -142,7 +141,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 
 	global.SetLoggerProvider(p.logProvider)
 
-	// 根据配置的 Logger 类型设置全局日志桥接
+	// Configure the global log bridge based on the selected logger type.
 	if err := p.setupLoggerBridge(logConfig.Logger, logConfig.Level); err != nil {
 		return fmt.Errorf("failed to setup logger bridge: %w", err)
 	}
@@ -151,7 +150,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 	return nil
 }
 
-// setupLoggerBridge 设置日志桥接
+// setupLoggerBridge configures the log bridge.
 func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) error {
 	slogLevel, zapLevel, logrusLevel, err := parseLogLevel(level)
 	if err != nil {
@@ -201,7 +200,7 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 		logger.AddHook(hook)
 		logger.SetLevel(logrusLevel)
 
-		// 设置为全局 logger
+		// Set as the global logger.
 		logrus.SetFormatter(logger.Formatter)
 		logrus.SetOutput(logger.Out)
 		logrus.SetLevel(logger.Level)
@@ -213,10 +212,10 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 			otellogr.WithLoggerProvider(p.logProvider),
 		)
 
-		// logr 需要用户自己管理实例，这里只是创建示例
+		// logr instances are managed by the caller; this only creates an example.
 		loggger := logr.New(logSink)
 
-		_ = loggger // 避免未使用警告，用户可以在应用中使用这个 logger
+		_ = loggger // Avoid unused warnings; applications can use this logger.
 		_ = level   // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
 		// otel.SetLogger(loggger)
 	default:
@@ -226,27 +225,9 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 	return nil
 }
 
-func parseLogLevel(level string) (otellog.Severity, zapcore.Level, logrus.Level, error) {
-	normalized := strings.ToLower(strings.TrimSpace(level))
-	if normalized == "" {
-		normalized = "info"
-	}
 
-	switch normalized {
-	case "debug":
-		return otellog.SeverityDebug, zapcore.DebugLevel, logrus.DebugLevel, nil
-	case "info":
-		return otellog.SeverityInfo, zapcore.InfoLevel, logrus.InfoLevel, nil
-	case "warn":
-		return otellog.SeverityWarn, zapcore.WarnLevel, logrus.WarnLevel, nil
-	case "error":
-		return otellog.SeverityError, zapcore.ErrorLevel, logrus.ErrorLevel, nil
-	default:
-		return 0, 0, 0, fmt.Errorf("unsupported log level: %s", level)
-	}
-}
 
-// createLogExporter 创建日志导出器
+// createLogExporter creates a log exporter.
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
 	case ExporterTypeStdout:
@@ -278,7 +259,7 @@ func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, e
 	}
 }
 
-// initTrace 初始化追踪提供者
+// initTrace initializes the trace provider.
 func (p *OtelProviders) initTrace(traceConfig TraceConfig, res *resource.Resource) error {
 	if !traceConfig.Enable {
 		return nil
@@ -302,7 +283,7 @@ func (p *OtelProviders) initTrace(traceConfig TraceConfig, res *resource.Resourc
 	return nil
 }
 
-// createTraceExporter 创建追踪导出器
+// createTraceExporter creates a trace exporter.
 func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
 	switch traceConfig.Exporter {
 	case ExporterTypeStdout:
@@ -334,7 +315,7 @@ func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
 	}
 }
 
-// initMetric 初始化指标提供者
+// initMetric initializes the metric provider.
 func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Resource) error {
 	if !metricConfig.Enable {
 		return nil
@@ -375,7 +356,7 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 	p.metricProvider = meterProvider
 	otel.SetMeterProvider(meterProvider)
 
-	// 启用 Go Runtime 指标
+	// Enable Go runtime metrics.
 	if metricConfig.EnableRuntimeMetrics {
 		if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(10 * time.Second)); err != nil {
 			return fmt.Errorf("failed to start runtime metrics: %w", err)
@@ -386,7 +367,7 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 	return nil
 }
 
-// createMetricExporter 创建指标导出器
+// createMetricExporter creates a metric exporter.
 func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
 	switch metricConfig.Exporter {
 	case ExporterTypeStdout:
@@ -416,7 +397,7 @@ func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
 	}
 }
 
-// Shutdown 关闭所有提供者
+// Shutdown closes all providers.
 func (p *OtelProviders) Shutdown(ctx context.Context) error {
 	var errors []error
 

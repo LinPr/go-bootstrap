@@ -95,7 +95,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 			Enable:     true,
 			Exporter:   ExporterTypeHTTP,
 			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Level:      "error",
+			Level:      "warn",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "test",

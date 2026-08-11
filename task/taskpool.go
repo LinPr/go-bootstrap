@@ -49,7 +49,7 @@ func (p *TaskPool[T]) Run(ctx context.Context) []T {
 	}
 	close(jobCh)
 
-	// 启动指定数量的 workers
+	// Start the configured number of workers.
 
 	var wg sync.WaitGroup
 	for i := 0; i < p.workers; i++ {
