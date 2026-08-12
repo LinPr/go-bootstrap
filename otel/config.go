@@ -91,7 +91,7 @@ type MetricConfig struct {
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		ServiceName:    "go-bootstrap",
+		ServiceName:    "default-service",
 		ServiceVersion: "0.0.0",
 		Log: LogConfig{
 			Enable:   true,

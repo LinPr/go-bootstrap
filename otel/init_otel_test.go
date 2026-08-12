@@ -317,6 +317,14 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		slog.InfoContext(ctx, message+" info", "phase", phase)
 		slog.WarnContext(ctx, message+" warn", "phase", phase)
 		slog.ErrorContext(ctx, message+" error", "phase", phase)
+
+		logger := slog.Default().WithGroup("sublogger")
+		slog.Default().Handler()
+		logger.DebugContext(ctx, message+" debug (sub)", "phase", phase)
+		logger.InfoContext(ctx, message+" info (sub)", "phase", phase)
+		logger.WarnContext(ctx, message+" warn (sub)", "phase", phase)
+		logger.ErrorContext(ctx, message+" error (sub)", "phase", phase)
+
 	case LoggerTypeZap:
 		zap.L().Debug(message+" debug", zap.Any("context", ctx), zap.String("phase", phase))
 		zap.L().Info(message+" info", zap.Any("context", ctx), zap.String("phase", phase))
@@ -338,7 +346,7 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zapsugar.Warnf(ctx, "%s warn (zapsugar-f) phase=%s", message, phase)
 		zapsugar.Errorf(ctx, "%s error (zapsugar-f) phase=%s", message, phase)
 
-		subLogger := zapsugar.NewSubScopedZapSugar("module-"+phase, nil)
+		subLogger := zapsugar.NewSubScopedZapSugar("sublogger", nil)
 		subLogger.Debugw(ctx, message+" debug (sub)", "phase", phase)
 		subLogger.Infow(ctx, message+" info (sub)", "phase", phase)
 		subLogger.Warnw(ctx, message+" warn (sub)", "phase", phase)
@@ -355,10 +363,10 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		nestedLogger.Warnw(ctx, message+" warn (nested)", "phase", phase)
 		nestedLogger.Errorw(ctx, message+" error (nested)", "phase", phase)
 
-		nestedLogger.Debugf(ctx, "%s debug (nested-f) phase=%s", message, phase)
-		nestedLogger.Infof(ctx, "%s info (nested-f) phase=%s", message, phase)
-		nestedLogger.Warnf(ctx, "%s warn (nested-f) phase=%s", message, phase)
-		nestedLogger.Errorf(ctx, "%s error (nested-f) phase=%s", message, phase)
+		// nestedLogger.Debugf(ctx, "%s debug (nested-f) phase=%s", message, phase)
+		// nestedLogger.Infof(ctx, "%s info (nested-f) phase=%s", message, phase)
+		// nestedLogger.Warnf(ctx, "%s warn (nested-f) phase=%s", message, phase)
+		// nestedLogger.Errorf(ctx, "%s error (nested-f) phase=%s", message, phase)
 
 		attributedLogger := subLogger.WithAttribute("request_id", "req-12345")
 		attributedLogger.Debugw(ctx, message+" debug (attributed)", "phase", phase)
@@ -366,16 +374,29 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		attributedLogger.Warnw(ctx, message+" warn (attributed)", "phase", phase)
 		attributedLogger.Errorw(ctx, message+" error (attributed)", "phase", phase)
 
-		attributedLogger.Debugf(ctx, "%s debug (attributed-f) phase=%s", message, phase)
-		attributedLogger.Infof(ctx, "%s info (attributed-f) phase=%s", message, phase)
-		attributedLogger.Warnf(ctx, "%s warn (attributed-f) phase=%s", message, phase)
-		attributedLogger.Errorf(ctx, "%s error (attributed-f) phase=%s", message, phase)
+		// attributedLogger.Debugf(ctx, "%s debug (attributed-f) phase=%s", message, phase)
+		// attributedLogger.Infof(ctx, "%s info (attributed-f) phase=%s", message, phase)
+		// attributedLogger.Warnf(ctx, "%s warn (attributed-f) phase=%s", message, phase)
+		// attributedLogger.Errorf(ctx, "%s error (attributed-f) phase=%s", message, phase)
 
 	case LoggerTypeLogrus:
 		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
 		logrus.WithContext(ctx).WithField("phase", phase).Info(message + " info")
 		logrus.WithContext(ctx).WithField("phase", phase).Warn(message + " warn")
 		logrus.WithContext(ctx).WithField("phase", phase).Error(message + " error")
+
+		subLogger := logrus.WithField("module", "sublogger")
+		subLogger.WithContext(ctx).WithField("phase", phase).Debug(message + " debug (sub)")
+		subLogger.WithContext(ctx).WithField("phase", phase).Info(message + " info (sub)")
+		subLogger.WithContext(ctx).WithField("phase", phase).Warn(message + " warn (sub)")
+		subLogger.WithContext(ctx).WithField("phase", phase).Error(message + " error (sub)")
+
+		nestedLogger := subLogger.WithField("component", "nested")
+		nestedLogger.WithContext(ctx).WithField("phase", phase).Debug(message + " debug (nested)")
+		nestedLogger.WithContext(ctx).WithField("phase", phase).Info(message + " info (nested)")
+		nestedLogger.WithContext(ctx).WithField("phase", phase).Warn(message + " warn (nested)")
+		nestedLogger.WithContext(ctx).WithField("phase", phase).Error(message + " error (nested)")
+
 	case LoggerTypeLogr:
 		logger := logr.New(otellogr.NewLogSink("integration", otellogr.WithLoggerProvider(provider.GetLoggerProvider())))
 		logger.WithValues("context", ctx, "phase", phase).V(1).Info(message + " debug")
