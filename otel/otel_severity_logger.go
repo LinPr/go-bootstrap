@@ -13,7 +13,7 @@ import (
 // otelLogProvider embeds otellog.LoggerProvider and adds a global severity floor.
 type otelLogProvider struct {
 	otellog.LoggerProvider
-	MinSeverity otellog.Severity
+	minSeverity otellog.Severity
 }
 
 // otelLogProvider wraps the underlying OTEL logger provider so we can inject
@@ -21,7 +21,7 @@ type otelLogProvider struct {
 func (p otelLogProvider) Logger(name string, options ...otellog.LoggerOption) otellog.Logger {
 	return otelSeverityLogger{
 		Logger:      p.LoggerProvider.Logger(name, options...),
-		MinSeverity: p.MinSeverity,
+		minSeverity: p.minSeverity,
 	}
 }
 
@@ -29,13 +29,13 @@ func (p otelLogProvider) Logger(name string, options ...otellog.LoggerOption) ot
 // below the configured severity before the bridge gets a chance to emit them.
 type otelSeverityLogger struct {
 	otellog.Logger
-	MinSeverity otellog.Severity
+	minSeverity otellog.Severity
 }
 
 // Enabled applies the configured minimum severity and then delegates to the
 // wrapped logger for the provider's own filtering and lifecycle checks.
 func (l otelSeverityLogger) Enabled(ctx context.Context, param otellog.EnabledParameters) bool {
-	if param.Severity < l.MinSeverity {
+	if param.Severity < l.minSeverity {
 		return false
 	}
 	return l.Logger.Enabled(ctx, param)

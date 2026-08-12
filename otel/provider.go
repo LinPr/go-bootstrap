@@ -164,13 +164,12 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 			"global",
 			otelslog.WithLoggerProvider(otelLogProvider{
 				LoggerProvider: p.logProvider,
-				MinSeverity:    otellog.Severity(slogLevel),
+				minSeverity:    otellog.Severity(slogLevel),
 			}),
 		)
 
-		slog.SetDefault(
-			slog.New(handler),
-		)
+		logger := slog.New(handler)
+		slog.SetDefault(logger)
 
 		// logger := otelslog.NewLogger(
 		// 	"global",
@@ -192,11 +191,12 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 		zap.ReplaceGlobals(logger)
 
 	case LoggerTypeLogrus:
-		logger := logrus.New()
+
 		hook := otellogrus.NewHook(
 			"global",
 			otellogrus.WithLoggerProvider(p.logProvider),
 		)
+		logger := logrus.New()
 		logger.AddHook(hook)
 		logger.SetLevel(logrusLevel)
 
@@ -214,7 +214,7 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 
 		// logr instances are managed by the caller; this only creates an example.
 		loggger := logr.New(logSink)
-
+		// TODO:
 		_ = loggger // Avoid unused warnings; applications can use this logger.
 		_ = level   // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
 		// otel.SetLogger(loggger)
@@ -224,8 +224,6 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 
 	return nil
 }
-
-
 
 // createLogExporter creates a log exporter.
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
