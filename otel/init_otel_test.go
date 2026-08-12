@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LinPr/go-bootstrap/otel/transport"
+	"github.com/LinPr/go-bootstrap/otel/zapsugar"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -89,7 +91,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 	globalProvider = nil
 
 	config := &Config{
-		ServiceName:    "integration-" + string(loggerType),
+		ServiceName:    "go-bootstrap-" + string(loggerType),
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
 			Enable:     true,
@@ -98,7 +100,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 			Level:      "warn",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "test",
+				"stream-name":   "go-bootstrap",
 			},
 			Logger: loggerType,
 			Pretty: false,
@@ -109,7 +111,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "test",
+				"stream-name":   "go-bootstrap",
 			},
 			Pretty:        false,
 			SamplingRatio: 1.0,
@@ -120,7 +122,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "test",
+				"stream-name":   "go-bootstrap",
 			},
 			Pretty:          false,
 			IntervalSeconds: 1,
@@ -190,7 +192,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 		t.Fatalf("failed to create http request: %v", err)
 	}
 	emitLogger(t, loggerType, provider, httpCtx, "http-client")
-	httpClient := &http.Client{Transport: NewOtelHttpTransport()}
+	httpClient := &http.Client{Transport: transport.NewOtelHttpTransport()}
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		t.Fatalf("http request failed: %v", err)
@@ -217,7 +219,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
 	grpcServer := grpc.NewServer(
-		WithOtelGRPCServerOption(),
+		transport.WithOtelGRPCServerOption(),
 		grpc.UnaryInterceptor(grpcUnaryHandler),
 	)
 	hs := health.NewServer()
@@ -239,7 +241,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		WithOtelGRPCClientOption(),
+		transport.WithOtelGRPCClientOption(),
 	)
 	if err != nil {
 		t.Fatalf("grpc dial failed: %v", err)
@@ -320,6 +322,22 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zap.L().Info(message+" info", zap.Any("context", ctx), zap.String("phase", phase))
 		zap.L().Warn(message+" warn", zap.Any("context", ctx), zap.String("phase", phase))
 		zap.L().Error(message+" error", zap.Any("context", ctx), zap.String("phase", phase))
+
+		zap.S().Debugw(message+" debug (sugar)", "context", ctx, "phase", phase)
+		zap.S().Infow(message+" info (sugar)", "context", ctx, "phase", phase)
+		zap.S().Warnw(message+" warn (sugar)", "context", ctx, "phase", phase)
+		zap.S().Errorw(message+" error (sugar)", "context", ctx, "phase", phase)
+
+		zapsugar.Debugw(ctx, message+" debug (zapsugar)", "phase", phase)
+		zapsugar.Infow(ctx, message+" info (zapsugar)", "phase", phase)
+		zapsugar.Warnw(ctx, message+" warn (zapsugar)", "phase", phase)
+		zapsugar.Errorw(ctx, message+" error (zapsugar)", "phase", phase)
+
+		zapsugar.Debugf(ctx, "%s debug (zapsugar-f) phase=%s", message, phase)
+		zapsugar.Infof(ctx, "%s info (zapsugar-f) phase=%s", message, phase)
+		zapsugar.Warnf(ctx, "%s warn (zapsugar-f) phase=%s", message, phase)
+		zapsugar.Errorf(ctx, "%s error (zapsugar-f) phase=%s", message, phase)
+
 	case LoggerTypeLogrus:
 		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
 		logrus.WithContext(ctx).WithField("phase", phase).Info(message + " info")
