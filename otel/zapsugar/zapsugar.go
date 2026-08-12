@@ -6,6 +6,67 @@ import (
 	"go.uber.org/zap"
 )
 
+type ZapSUgar struct {
+	logger *zap.SugaredLogger
+}
+
+func NewSubScopedZapSugar(name string, logger *ZapSUgar) *ZapSUgar {
+
+	// If logger is nil, use the global zap.S() logger and create a new sub-scoped logger with the given name.
+	if logger == nil {
+		return &ZapSUgar{
+			logger: zap.S().Named(name),
+		}
+	}
+
+	// Otherwise, create a new sub-scoped logger from the provided logger.
+	return &ZapSUgar{
+		logger: logger.logger.Named(name),
+	}
+}
+
+func (s *ZapSUgar) WithOptions(opts ...zap.Option) *ZapSUgar {
+	s.logger = s.logger.WithOptions(opts...)
+	return s
+}
+
+func (s *ZapSUgar) WithAttribute(name string, args any) *ZapSUgar {
+	s.logger = s.logger.With(name, args)
+	return s
+}
+
+func (s *ZapSUgar) Debugw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).Debugw(msg, append([]any{"context", ctx}, args...)...)
+}
+
+func (s *ZapSUgar) Infow(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).Infow(msg, append([]any{"context", ctx}, args...)...)
+}
+
+func (s *ZapSUgar) Warnw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).Warnw(msg, append([]any{"context", ctx}, args...)...)
+}
+
+func (s *ZapSUgar) Errorw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).Errorw(msg, append([]any{"context", ctx}, args...)...)
+}
+
+func (s *ZapSUgar) Debugf(ctx context.Context, template string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Debugf(template, args...)
+}
+
+func (s *ZapSUgar) Infof(ctx context.Context, template string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Infof(template, args...)
+}
+
+func (s *ZapSUgar) Warnf(ctx context.Context, template string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Warnf(template, args...)
+}
+
+func (s *ZapSUgar) Errorf(ctx context.Context, template string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Errorf(template, args...)
+}
+
 // Debugw logs a debug message with context and key-value pairs.
 func Debugw(ctx context.Context, msg string, args ...any) {
 	zap.S().WithOptions(zap.AddCallerSkip(1)).Debugw(msg, append([]any{"context", ctx}, args...)...)

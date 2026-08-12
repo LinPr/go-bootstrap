@@ -356,7 +356,9 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 
 	// Enable Go runtime metrics.
 	if metricConfig.EnableRuntimeMetrics {
-		if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(10 * time.Second)); err != nil {
+		if err := runtime.Start(
+			runtime.WithMinimumReadMemStatsInterval(time.Duration(metricConfig.IntervalSeconds) * time.Second),
+		); err != nil {
 			return fmt.Errorf("failed to start runtime metrics: %w", err)
 		}
 	}

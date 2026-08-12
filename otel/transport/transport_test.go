@@ -107,7 +107,7 @@ func TestTransportAndGRPC_EmitTelemetryToOTLPHTTP(t *testing.T) {
 	defer collector.Close()
 
 	config := &otel.Config{
-		ServiceName:    "transport-e2e",
+		ServiceName:    "go-bootstrap",
 		ServiceVersion: "1.0.0",
 		Log: otel.LogConfig{
 			Enable:     true,

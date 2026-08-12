@@ -91,7 +91,7 @@ func runInitOtelProviderIntegration(t *testing.T, loggerType LoggerType) {
 	globalProvider = nil
 
 	config := &Config{
-		ServiceName:    "go-bootstrap-" + string(loggerType),
+		ServiceName:    "go-bootstrap",
 		ServiceVersion: "1.0.0",
 		Log: LogConfig{
 			Enable:     true,
@@ -337,6 +337,39 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zapsugar.Infof(ctx, "%s info (zapsugar-f) phase=%s", message, phase)
 		zapsugar.Warnf(ctx, "%s warn (zapsugar-f) phase=%s", message, phase)
 		zapsugar.Errorf(ctx, "%s error (zapsugar-f) phase=%s", message, phase)
+
+		subLogger := zapsugar.NewSubScopedZapSugar("module-"+phase, nil)
+		subLogger.Debugw(ctx, message+" debug (sub)", "phase", phase)
+		subLogger.Infow(ctx, message+" info (sub)", "phase", phase)
+		subLogger.Warnw(ctx, message+" warn (sub)", "phase", phase)
+		subLogger.Errorw(ctx, message+" error (sub)", "phase", phase)
+
+		subLogger.Debugf(ctx, "%s debug (sub-f) phase=%s", message, phase)
+		subLogger.Infof(ctx, "%s info (sub-f) phase=%s", message, phase)
+		subLogger.Warnf(ctx, "%s warn (sub-f) phase=%s", message, phase)
+		subLogger.Errorf(ctx, "%s error (sub-f) phase=%s", message, phase)
+
+		nestedLogger := zapsugar.NewSubScopedZapSugar("nested", subLogger)
+		nestedLogger.Debugw(ctx, message+" debug (nested)", "phase", phase)
+		nestedLogger.Infow(ctx, message+" info (nested)", "phase", phase)
+		nestedLogger.Warnw(ctx, message+" warn (nested)", "phase", phase)
+		nestedLogger.Errorw(ctx, message+" error (nested)", "phase", phase)
+
+		nestedLogger.Debugf(ctx, "%s debug (nested-f) phase=%s", message, phase)
+		nestedLogger.Infof(ctx, "%s info (nested-f) phase=%s", message, phase)
+		nestedLogger.Warnf(ctx, "%s warn (nested-f) phase=%s", message, phase)
+		nestedLogger.Errorf(ctx, "%s error (nested-f) phase=%s", message, phase)
+
+		attributedLogger := subLogger.WithAttribute("request_id", "req-12345")
+		attributedLogger.Debugw(ctx, message+" debug (attributed)", "phase", phase)
+		attributedLogger.Infow(ctx, message+" info (attributed)", "phase", phase)
+		attributedLogger.Warnw(ctx, message+" warn (attributed)", "phase", phase)
+		attributedLogger.Errorw(ctx, message+" error (attributed)", "phase", phase)
+
+		attributedLogger.Debugf(ctx, "%s debug (attributed-f) phase=%s", message, phase)
+		attributedLogger.Infof(ctx, "%s info (attributed-f) phase=%s", message, phase)
+		attributedLogger.Warnf(ctx, "%s warn (attributed-f) phase=%s", message, phase)
+		attributedLogger.Errorf(ctx, "%s error (attributed-f) phase=%s", message, phase)
 
 	case LoggerTypeLogrus:
 		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
