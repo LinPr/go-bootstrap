@@ -139,7 +139,7 @@ func runMetricsTest(t *testing.T, provider *OtelProviders) {
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
 	grpcServer := grpc.NewServer(
-		transport.WithOtelGRPCServerOption(),
+		transport.WithOtelGRPCServerStatsHandler(),
 		grpc.UnaryInterceptor(grpcUnaryHandler),
 	)
 	hs := health.NewServer()
@@ -158,8 +158,9 @@ func runMetricsTest(t *testing.T, provider *OtelProviders) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		transport.WithOtelGRPCClientOption(),
+		transport.WithOtelGRPCClientStatsHandler(),
 	)
+
 	if err != nil {
 		t.Fatalf("grpc dial failed: %v", err)
 	}
