@@ -1,4 +1,4 @@
-package transport
+package grpc
 
 import (
 	"context"
@@ -27,12 +27,39 @@ func StreamClientLoggingInterceptor() grpc.StreamClientInterceptor {
 		stream, err := streamer(ctx, desc, cc, method, opts...)
 
 		if err != nil {
-			slog.DebugContext(ctx, "grpc client stream error", "method", method, "error", err)
-		} else {
-			slog.DebugContext(ctx, "grpc client stream", "method", method)
+			slog.DebugContext(ctx, "grpc client stream creation error", "method", method, "error", err)
+			return nil, err
 		}
-		return stream, err
+
+		slog.DebugContext(ctx, "grpc client stream created", "method", method)
+		return &loggingClientStream{ClientStream: stream, ctx: ctx, method: method}, nil
 	}
+}
+
+type loggingClientStream struct {
+	grpc.ClientStream
+	ctx    context.Context
+	method string
+}
+
+func (s *loggingClientStream) RecvMsg(m any) error {
+	err := s.ClientStream.RecvMsg(m)
+	if err != nil {
+		slog.DebugContext(s.ctx, "grpc client stream recv error", "method", s.method, "error", err)
+	} else {
+		slog.DebugContext(s.ctx, "grpc client stream recv", "method", s.method, "message", m)
+	}
+	return err
+}
+
+func (s *loggingClientStream) SendMsg(m any) error {
+	err := s.ClientStream.SendMsg(m)
+	if err != nil {
+		slog.DebugContext(s.ctx, "grpc client stream send error", "method", s.method, "error", err)
+	} else {
+		slog.DebugContext(s.ctx, "grpc client stream send", "method", s.method, "message", m)
+	}
+	return err
 }
 
 // UnaryServerLoggingInterceptor logs debug information for unary server RPCs.
@@ -53,13 +80,44 @@ func UnaryServerLoggingInterceptor() grpc.UnaryServerInterceptor {
 func StreamServerLoggingInterceptor() grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
-		err := handler(srv, ss)
+		wrappedStream := &loggingServerStream{ServerStream: ss, ctx: ctx, method: info.FullMethod}
+		err := handler(srv, wrappedStream)
 
 		if err != nil {
-			slog.DebugContext(ctx, "grpc server stream error", "method", info.FullMethod, "error", err)
+			slog.DebugContext(ctx, "grpc server stream ended with error", "method", info.FullMethod, "error", err)
 		} else {
-			slog.DebugContext(ctx, "grpc server stream", "method", info.FullMethod)
+			slog.DebugContext(ctx, "grpc server stream ended", "method", info.FullMethod)
 		}
 		return err
 	}
+}
+
+type loggingServerStream struct {
+	grpc.ServerStream
+	ctx    context.Context
+	method string
+}
+
+func (s *loggingServerStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s *loggingServerStream) RecvMsg(m any) error {
+	err := s.ServerStream.RecvMsg(m)
+	if err != nil {
+		slog.DebugContext(s.ctx, "grpc server stream recv error", "method", s.method, "error", err)
+	} else {
+		slog.DebugContext(s.ctx, "grpc server stream recv", "method", s.method, "message", m)
+	}
+	return err
+}
+
+func (s *loggingServerStream) SendMsg(m any) error {
+	err := s.ServerStream.SendMsg(m)
+	if err != nil {
+		slog.DebugContext(s.ctx, "grpc server stream send error", "method", s.method, "error", err)
+	} else {
+		slog.DebugContext(s.ctx, "grpc server stream send", "method", s.method, "message", m)
+	}
+	return err
 }
