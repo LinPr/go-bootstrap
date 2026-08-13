@@ -88,14 +88,6 @@ type loggingRoundTripper struct {
 	next http.RoundTripper
 }
 
-// NewLoggingTransport creates an HTTP client transport that logs requests and responses
-func NewLoggingTransport(next http.RoundTripper) http.RoundTripper {
-	if next == nil {
-		next = http.DefaultTransport
-	}
-	return &loggingRoundTripper{next: next}
-}
-
 func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
@@ -139,17 +131,55 @@ func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	return resp, nil
 }
 
-// NewLoggingHttpClient creates an HTTP client with logging transport
-func NewLoggingHttpClient() *http.Client {
-	return &http.Client{
-		Transport: NewLoggingTransport(http.DefaultTransport),
+// ClientOption configures an HTTP client
+type ClientOption func(*http.Client)
+
+// WithOtelHttpTransport enables OTEL instrumentation for HTTP client
+func WithOtelHttpTransport() ClientOption {
+	return func(c *http.Client) {
+		if c.Transport == nil {
+			c.Transport = NewOtelHttpTransport()
+		} else {
+			c.Transport = NewOtelHttpTransport()
+		}
 	}
 }
 
-// NewOtelLoggingHttpClient creates an HTTP client with both OTEL instrumentation and logging
-func NewOtelLoggingHttpClient() *http.Client {
-	otelTransport := NewOtelHttpTransport()
-	return &http.Client{
-		Transport: NewLoggingTransport(otelTransport),
+// WithClientDebugLog enables debug logging for HTTP client requests and responses
+func WithClientDebugLog() ClientOption {
+	return func(c *http.Client) {
+		if c.Transport == nil {
+			c.Transport = http.DefaultTransport
+		}
+		c.Transport = &loggingRoundTripper{next: c.Transport}
 	}
+}
+
+// NewHttpClient creates an HTTP client with the given options
+func NewHttpClient(opts ...ClientOption) *http.Client {
+	client := &http.Client{
+		Transport: http.DefaultTransport,
+	}
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client
+}
+
+// ServerOption configures an HTTP server handler
+type ServerOption func(http.Handler) http.Handler
+
+// WithServerDebugLog enables debug logging for HTTP server requests and responses
+func WithServerDebugLog() ServerOption {
+	return func(next http.Handler) http.Handler {
+		return ServerLoggingMiddleware(next)
+	}
+}
+
+// NewHttpHandler wraps an HTTP handler with the given options
+func NewHttpHandler(handler http.Handler, opts ...ServerOption) http.Handler {
+	for _, opt := range opts {
+		handler = opt(handler)
+	}
+	return handler
 }
