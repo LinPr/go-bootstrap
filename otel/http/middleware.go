@@ -2,11 +2,11 @@ package http
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httputil"
-	"time"
+	"strings"
 )
 
 type responseRecorder struct {
@@ -33,10 +33,31 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	return r.ResponseWriter.Write(b)
 }
 
+func buildCurlCommand(r *http.Request, body []byte) string {
+	var curl strings.Builder
+	curl.WriteString("curl -X ")
+	curl.WriteString(r.Method)
+
+	for key, values := range r.Header {
+		for _, value := range values {
+			curl.WriteString(fmt.Sprintf(" -H '%s: %s'", key, value))
+		}
+	}
+
+	if len(body) > 0 {
+		curl.WriteString(fmt.Sprintf(" -d '%s'", string(body)))
+	}
+
+	curl.WriteString(" '")
+	curl.WriteString(r.URL.String())
+	curl.WriteString("'")
+
+	return curl.String()
+}
+
 // ServerLoggingMiddleware logs HTTP request and response details for server
 func ServerLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
 		ctx := r.Context()
 
 		var reqBody []byte
@@ -45,29 +66,20 @@ func ServerLoggingMiddleware(next http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		}
 
-		slog.DebugContext(ctx, "HTTP server request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
-			"remote_addr", r.RemoteAddr,
-			"user_agent", r.UserAgent(),
-			"content_length", r.ContentLength,
-			"headers", r.Header,
-			"body", string(reqBody),
-		)
-
 		recorder := newResponseRecorder(w)
 		next.ServeHTTP(recorder, r)
 
-		duration := time.Since(start)
-		slog.DebugContext(ctx, "HTTP server response",
-			"method", r.Method,
-			"path", r.URL.Path,
+		msg := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+		if r.URL.RawQuery != "" {
+			msg += "?" + r.URL.RawQuery
+		}
+
+		slog.DebugContext(ctx, msg,
 			"status", recorder.statusCode,
-			"duration_ms", duration.Milliseconds(),
-			"response_size", recorder.body.Len(),
-			"headers", recorder.Header(),
-			"body", recorder.body.String(),
+			"request_header", r.Header,
+			"request_body", string(reqBody),
+			"response_header", recorder.Header(),
+			"response_body", recorder.body.String(),
 		)
 	})
 }
@@ -85,25 +97,24 @@ func NewLoggingTransport(next http.RoundTripper) http.RoundTripper {
 }
 
 func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	start := time.Now()
 	ctx := req.Context()
 
-	reqDump, _ := httputil.DumpRequestOut(req, true)
-	slog.DebugContext(ctx, "HTTP client request",
-		"method", req.Method,
-		"url", req.URL.String(),
-		"headers", req.Header,
-		"dump", string(reqDump),
-	)
+	var reqBody []byte
+	if req.Body != nil {
+		reqBody, _ = io.ReadAll(req.Body)
+		req.Body = io.NopCloser(bytes.NewBuffer(reqBody))
+	}
+
+	curlCmd := buildCurlCommand(req, reqBody)
 
 	resp, err := t.next.RoundTrip(req)
-	duration := time.Since(start)
 
 	if err != nil {
-		slog.ErrorContext(ctx, "HTTP client request failed",
-			"method", req.Method,
-			"url", req.URL.String(),
-			"duration_ms", duration.Milliseconds(),
+		msg := fmt.Sprintf("%s %s", req.Method, req.URL.String())
+		slog.ErrorContext(ctx, msg,
+			"request_header", req.Header,
+			"request_body", string(reqBody),
+			"curl_cmd", curlCmd,
 			"error", err,
 		)
 		return nil, err
@@ -115,14 +126,14 @@ func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 	}
 
-	slog.DebugContext(ctx, "HTTP client response",
-		"method", req.Method,
-		"url", req.URL.String(),
+	msg := fmt.Sprintf("%s %s", req.Method, req.URL.String())
+	slog.DebugContext(ctx, msg,
 		"status", resp.StatusCode,
-		"duration_ms", duration.Milliseconds(),
-		"content_length", resp.ContentLength,
-		"headers", resp.Header,
-		"body", string(respBody),
+		"request_header", req.Header,
+		"request_body", string(reqBody),
+		"response_header", resp.Header,
+		"response_body", string(respBody),
+		"curl_cmd", curlCmd,
 	)
 
 	return resp, nil
