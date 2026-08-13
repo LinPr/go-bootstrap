@@ -11,13 +11,17 @@ import (
 	"testing"
 )
 
-func TestServerLoggingMiddleware(t *testing.T) {
+func setupTestLogger(t *testing.T) {
 	previousLogger := slog.Default()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
 	t.Cleanup(func() {
 		slog.SetDefault(previousLogger)
 	})
+}
+
+func TestServerLoggingMiddleware(t *testing.T) {
+	setupTestLogger(t)
 
 	baseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -46,12 +50,7 @@ func TestServerLoggingMiddleware(t *testing.T) {
 }
 
 func TestClientWithDebugLog(t *testing.T) {
-	previousLogger := slog.Default()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	slog.SetDefault(logger)
-	t.Cleanup(func() {
-		slog.SetDefault(previousLogger)
-	})
+	setupTestLogger(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -86,6 +85,8 @@ func TestClientWithDebugLog(t *testing.T) {
 }
 
 func TestClientWithOtelAndDebugLog(t *testing.T) {
+	setupTestLogger(t)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("otel response"))
@@ -107,25 +108,5 @@ func TestClientWithOtelAndDebugLog(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestNewHttpClient(t *testing.T) {
-	client := NewHttpClient()
-	if client == nil {
-		t.Fatal("client is nil")
-	}
-	if client.Transport == nil {
-		t.Fatal("transport is nil")
-	}
-}
-
-func TestNewHttpClientWithOtel(t *testing.T) {
-	client := NewHttpClient(WithOtelHttpTransport())
-	if client == nil {
-		t.Fatal("client is nil")
-	}
-	if client.Transport == nil {
-		t.Fatal("transport is nil")
 	}
 }

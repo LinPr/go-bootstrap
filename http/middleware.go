@@ -134,14 +134,10 @@ func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 // ClientOption configures an HTTP client
 type ClientOption func(*http.Client)
 
-// WithOtelHttpTransport enables OTEL instrumentation for HTTP client
+// WithOtelHttpTransport enables OpenTelemetry instrumentation for HTTP client
 func WithOtelHttpTransport() ClientOption {
 	return func(c *http.Client) {
-		if c.Transport == nil {
-			c.Transport = NewOtelHttpTransport()
-		} else {
-			c.Transport = NewOtelHttpTransport()
-		}
+		c.Transport = NewOtelHttpTransport()
 	}
 }
 

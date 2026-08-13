@@ -1,9 +1,8 @@
-package transport
+package grpc
 
 import (
 	"context"
 
-	"github.com/LinPr/go-bootstrap/otel/version"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -147,8 +146,8 @@ type serverMessageSizeStatsHandler struct {
 // newMessageSizeStatsHandler creates a stats handler that records message sizes for server.
 func newMessageSizeStatsHandler() *serverMessageSizeStatsHandler {
 	meter := otel.Meter(
-		"github.com/LinPr/go-bootstrap/otel/transport",
-		metric.WithInstrumentationVersion(version.Version),
+		"github.com/LinPr/go-bootstrap/grpc",
+		metric.WithInstrumentationVersion(Version),
 	)
 	inPayloadSize, _ := meter.Int64Histogram(
 		"rpc.server.inpayload.size",
@@ -198,8 +197,8 @@ type clientMessageSizeStatsHandler struct {
 // newClientMessageSizeStatsHandler creates a stats handler that records message sizes for client.
 func newClientMessageSizeStatsHandler() *clientMessageSizeStatsHandler {
 	meter := otel.Meter(
-		"github.com/LinPr/go-bootstrap/otel/transport",
-		metric.WithInstrumentationVersion(version.Version),
+		"github.com/LinPr/go-bootstrap/grpc",
+		metric.WithInstrumentationVersion(Version),
 	)
 	inPayloadSize, _ := meter.Int64Histogram(
 		"rpc.client.inpayload.size",
