@@ -2,72 +2,106 @@ package transport
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
 	"github.com/LinPr/go-bootstrap/otel/version"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
 )
 
-func NewOtelHttpTransport() *otelhttp.Transport {
-	return otelhttp.NewTransport(
-		http.DefaultTransport,
-		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-			return fmt.Sprintf("%s %s%s", r.Method, r.URL.Host, r.URL.Path)
-		}),
-	)
+// GRPCClientStatsOption configures gRPC client stats handlers.
+type GRPCClientStatsOption func(*grpcClientStatsConfig)
+
+type grpcClientStatsConfig struct {
+	otelOptions    []otelgrpc.Option
+	customHandlers []stats.Handler
 }
 
-// WithOtelGRPCClientOption returns a gRPC dial option that enables OTEL
-// client-side instrumentation. Additional stats handlers can be provided
-// to extend telemetry collection.
-func WithOtelGRPCClientOption(opts ...otelgrpc.Option) grpc.DialOption {
-	return WithOtelGRPCClientOptionWithHandlers(nil, opts...)
+// WithOtelGRPCOptions adds OpenTelemetry options for gRPC client instrumentation.
+func WithOtelGRPCOptions(opts ...otelgrpc.Option) GRPCClientStatsOption {
+	return func(c *grpcClientStatsConfig) {
+		c.otelOptions = append(c.otelOptions, opts...)
+	}
 }
 
-// WithOtelGRPCClientOptionWithHandlers returns a gRPC dial option with custom stats handlers.
-func WithOtelGRPCClientOptionWithHandlers(customHandlers []stats.Handler, opts ...otelgrpc.Option) grpc.DialOption {
-	opts = append(
+// WithCustomStatsHandlers adds custom stats handlers for gRPC client.
+func WithCustomStatsHandlers(handlers ...stats.Handler) GRPCClientStatsOption {
+	return func(c *grpcClientStatsConfig) {
+		c.customHandlers = append(c.customHandlers, handlers...)
+	}
+}
+
+// WithOtelGRPCClientStatsHandler returns a gRPC dial option that enables OTEL
+// client-side instrumentation with optional custom stats handlers.
+func WithOtelGRPCClientStatsHandler(opts ...GRPCClientStatsOption) grpc.DialOption {
+	config := &grpcClientStatsConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	otelOpts := append(
 		[]otelgrpc.Option{
 			otelgrpc.WithMessageEvents(otelgrpc.ReceivedEvents, otelgrpc.SentEvents),
 		},
-		opts...,
+		config.otelOptions...,
 	)
+
 	handlers := []stats.Handler{
-		otelgrpc.NewClientHandler(opts...),
+		otelgrpc.NewClientHandler(otelOpts...),
 		newClientMessageSizeStatsHandler(),
 	}
-	handlers = append(handlers, customHandlers...)
+	handlers = append(handlers, config.customHandlers...)
+
 	return grpc.WithStatsHandler(&chainedStatsHandler{
 		handlers: handlers,
 	})
 }
 
-// WithOtelGRPCServerOption returns a gRPC server option that enables OTEL
-// server-side instrumentation. Additional stats handlers can be provided
-// to extend telemetry collection.
-func WithOtelGRPCServerOption(opts ...otelgrpc.Option) grpc.ServerOption {
-	return WithOtelGRPCServerOptionWithHandlers(nil, opts...)
+// GRPCServerStatsOption configures gRPC server stats handlers.
+type GRPCServerStatsOption func(*grpcServerStatsConfig)
+
+type grpcServerStatsConfig struct {
+	otelOptions    []otelgrpc.Option
+	customHandlers []stats.Handler
 }
 
-// WithOtelGRPCServerOptionWithHandlers returns a gRPC server option with custom stats handlers.
-func WithOtelGRPCServerOptionWithHandlers(customHandlers []stats.Handler, opts ...otelgrpc.Option) grpc.ServerOption {
-	opts = append(
+// WithOtelGRPCServerOptions adds OpenTelemetry options for gRPC server instrumentation.
+func WithOtelGRPCServerOptions(opts ...otelgrpc.Option) GRPCServerStatsOption {
+	return func(c *grpcServerStatsConfig) {
+		c.otelOptions = append(c.otelOptions, opts...)
+	}
+}
+
+// WithCustomServerStatsHandlers adds custom stats handlers for gRPC server.
+func WithCustomServerStatsHandlers(handlers ...stats.Handler) GRPCServerStatsOption {
+	return func(c *grpcServerStatsConfig) {
+		c.customHandlers = append(c.customHandlers, handlers...)
+	}
+}
+
+// WithOtelGRPCServerStatsHandler returns a gRPC server option that enables OTEL
+// server-side instrumentation with optional custom stats handlers.
+func WithOtelGRPCServerStatsHandler(opts ...GRPCServerStatsOption) grpc.ServerOption {
+	config := &grpcServerStatsConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	otelOpts := append(
 		[]otelgrpc.Option{
 			otelgrpc.WithMessageEvents(otelgrpc.ReceivedEvents, otelgrpc.SentEvents),
 		},
-		opts...,
+		config.otelOptions...,
 	)
+
 	handlers := []stats.Handler{
-		otelgrpc.NewServerHandler(opts...),
+		otelgrpc.NewServerHandler(otelOpts...),
 		newMessageSizeStatsHandler(),
 	}
-	handlers = append(handlers, customHandlers...)
+	handlers = append(handlers, config.customHandlers...)
+
 	return grpc.StatsHandler(&chainedStatsHandler{
 		handlers: handlers,
 	})

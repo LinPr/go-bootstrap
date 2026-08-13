@@ -56,49 +56,6 @@ func restoreLogrusState(state logrusState) {
 	logger.Hooks = state.hooks
 }
 
-func TestOtelLogger(t *testing.T) {
-	previousSlog := slog.Default()
-	previousZap := zap.L()
-	previousLogrus := snapshotLogrusState()
-
-	t.Cleanup(func() {
-		slog.SetDefault(previousSlog)
-		zap.ReplaceGlobals(previousZap)
-		restoreLogrusState(previousLogrus)
-		globalProvider = nil
-	})
-
-	tests := []struct {
-		name       string
-		loggerType LoggerType
-	}{
-		{name: "slog", loggerType: LoggerTypeSlog},
-		{name: "zap", loggerType: LoggerTypeZap},
-		{name: "logrus", loggerType: LoggerTypeLogrus},
-		{name: "logr", loggerType: LoggerTypeLogr},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			globalProvider = nil
-
-			config := newLoggerTestConfig(tt.loggerType)
-			provider, err := NewOtelProviders(config)
-			if err != nil {
-				t.Fatalf("failed to initialize provider: %v", err)
-			}
-
-			runLoggerTest(t, tt.loggerType, provider)
-
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := ShutdownOtelProvider(shutdownCtx); err != nil {
-				t.Fatalf("failed to shutdown provider: %v", err)
-			}
-		})
-	}
-}
-
 func TestOtelMetrics(t *testing.T) {
 	previousSlog := slog.Default()
 	previousZap := zap.L()
@@ -134,92 +91,6 @@ func TestOtelMetrics(t *testing.T) {
 	if err := ShutdownOtelProvider(shutdownCtx); err != nil {
 		t.Fatalf("failed to shutdown provider: %v", err)
 	}
-}
-
-func newLoggerTestConfig(loggerType LoggerType) *Config {
-	return &Config{
-		ServiceName:    "go-bootstrap",
-		ServiceVersion: "1.0.0",
-		Log: LogConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Level:      "warn",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap",
-			},
-			Logger: loggerType,
-			Pretty: false,
-		},
-		Trace: TraceConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap",
-			},
-			Pretty:        false,
-			SamplingRatio: 1.0,
-		},
-		Metric: MetricConfig{
-			Enable: false,
-		},
-	}
-}
-
-func newMetricsTestConfig() *Config {
-	return &Config{
-		ServiceName:    "go-bootstrap",
-		ServiceVersion: "1.0.0",
-		Log: LogConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Level:      "info",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap",
-			},
-			Logger: LoggerTypeSlog,
-			Pretty: false,
-		},
-		Trace: TraceConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap",
-			},
-			Pretty:        false,
-			SamplingRatio: 1.0,
-		},
-		Metric: MetricConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap",
-			},
-			Pretty:          false,
-			IntervalSeconds: 1,
-		},
-	}
-}
-
-func runLoggerTest(t *testing.T, loggerType LoggerType, provider *OtelProviders) {
-	t.Helper()
-
-	tracer := otel.Tracer("logger-test-tracer")
-	rootCtx, rootSpan := tracer.Start(context.Background(), "logger-test-root")
-	defer rootSpan.End()
-
-	emitLogger(t, loggerType, provider, rootCtx, "root")
-
-	time.Sleep(2 * time.Second)
 }
 
 func runMetricsTest(t *testing.T, provider *OtelProviders) {
@@ -323,9 +194,12 @@ func runMetricsTest(t *testing.T, provider *OtelProviders) {
 
 		grpcCtx, grpcSpan := tracer.Start(rootCtx, "grpc-client-call")
 		slog.InfoContext(grpcCtx, "Sending gRPC health check", "iteration", i, "service", "metrics.Service")
-		if _, err := grpcClient.Check(grpcCtx, &healthpb.HealthCheckRequest{Service: "metrics.Service"}); err != nil {
+		resp, err := grpcClient.Check(grpcCtx, &healthpb.HealthCheckRequest{Service: "metrics.Service"})
+		if err != nil {
 			t.Fatalf("iteration %d: grpc health check failed: %v", i, err)
 		}
+		slog.Info("rpc check resp: " + resp.String())
+		resp.GetStatus()
 		requestCounter.Add(grpcCtx, 1, metric.WithAttributes(attribute.String("transport", "grpc-client")))
 		histogram.Record(grpcCtx, 34.0, metric.WithAttributes(attribute.String("transport", "grpc-client")))
 		grpcSpan.End()
@@ -366,6 +240,135 @@ func runMetricsTest(t *testing.T, provider *OtelProviders) {
 		t.Fatalf("failed to scrape prometheus metrics: %v", err)
 	}
 	defer metricsResp.Body.Close()
+}
+
+func TestOtelLogger(t *testing.T) {
+	previousSlog := slog.Default()
+	previousZap := zap.L()
+	previousLogrus := snapshotLogrusState()
+
+	t.Cleanup(func() {
+		slog.SetDefault(previousSlog)
+		zap.ReplaceGlobals(previousZap)
+		restoreLogrusState(previousLogrus)
+		globalProvider = nil
+	})
+
+	tests := []struct {
+		name       string
+		loggerType LoggerType
+	}{
+		{name: "slog", loggerType: LoggerTypeSlog},
+		{name: "zap", loggerType: LoggerTypeZap},
+		{name: "logrus", loggerType: LoggerTypeLogrus},
+		{name: "logr", loggerType: LoggerTypeLogr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalProvider = nil
+
+			config := newLoggerTestConfig(tt.loggerType)
+			provider, err := NewOtelProviders(config)
+			if err != nil {
+				t.Fatalf("failed to initialize provider: %v", err)
+			}
+
+			runLoggerTest(t, tt.loggerType, provider)
+
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := ShutdownOtelProvider(shutdownCtx); err != nil {
+				t.Fatalf("failed to shutdown provider: %v", err)
+			}
+		})
+	}
+}
+
+func newLoggerTestConfig(loggerType LoggerType) *Config {
+	return &Config{
+		ServiceName:    "go-bootstrap",
+		ServiceVersion: "1.0.0",
+		Log: LogConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+			Level:      "warn",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "go-bootstrap",
+			},
+			Logger: loggerType,
+			Pretty: false,
+		},
+		Trace: TraceConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "go-bootstrap",
+			},
+			Pretty:        false,
+			SamplingRatio: 1.0,
+		},
+		Metric: MetricConfig{
+			Enable: false,
+		},
+	}
+}
+
+func newMetricsTestConfig() *Config {
+	return &Config{
+		ServiceName:    "go-bootstrap",
+		ServiceVersion: "1.0.0",
+		Log: LogConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+			Level:      "info",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "go-bootstrap",
+			},
+			Logger: LoggerTypeSlog,
+			Pretty: false,
+		},
+		Trace: TraceConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "go-bootstrap",
+			},
+			Pretty:        false,
+			SamplingRatio: 1.0,
+		},
+		Metric: MetricConfig{
+			Enable:     true,
+			Exporter:   ExporterTypeHTTP,
+			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
+			Headers: map[string]string{
+				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+				"stream-name":   "go-bootstrap",
+			},
+			Pretty:          false,
+			IntervalSeconds: 1,
+		},
+	}
+}
+
+func runLoggerTest(t *testing.T, loggerType LoggerType, provider *OtelProviders) {
+	t.Helper()
+
+	tracer := otel.Tracer("logger-test-tracer")
+	rootCtx, rootSpan := tracer.Start(context.Background(), "logger-test-root")
+	defer rootSpan.End()
+
+	emitLogger(t, loggerType, provider, rootCtx, "root")
+
+	time.Sleep(2 * time.Second)
 }
 
 func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ctx context.Context, phase string) {
