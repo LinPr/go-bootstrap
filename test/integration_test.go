@@ -101,17 +101,18 @@ func TestOtelHttpGrpcIntegration(t *testing.T) {
 	tracer := otelgo.Tracer("integration-test-tracer")
 
 	var httpServerTraceID, grpcServerTraceID string
-	httpServer := httptest.NewServer(httppkg.NewOtelHttpHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serverCtx := r.Context()
-		httpServerTraceID = trace.SpanContextFromContext(serverCtx).TraceID().String()
-		slog.InfoContext(serverCtx, "HTTP server received request", "path", r.URL.Path, "method", r.Method)
-		requestCounter.Add(serverCtx, 1, metric.WithAttributes(attribute.String("transport", "http-server")))
-		histogram.Record(serverCtx, 12.5, metric.WithAttributes(attribute.String("transport", "http-server")))
-		_, _ = w.Write([]byte("ok"))
-	}), "http-server"))
+	httpServer := httptest.NewServer(
+		httppkg.NewHttpServerOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCtx := r.Context()
+			httpServerTraceID = trace.SpanContextFromContext(serverCtx).TraceID().String()
+			slog.InfoContext(serverCtx, "HTTP server received request", "path", r.URL.Path, "method", r.Method)
+			requestCounter.Add(serverCtx, 1, metric.WithAttributes(attribute.String("transport", "http-server")))
+			histogram.Record(serverCtx, 12.5, metric.WithAttributes(attribute.String("transport", "http-server")))
+			_, _ = w.Write([]byte("ok"))
+		}), "http-server"))
 	defer httpServer.Close()
 
-	httpClient := &http.Client{Transport: httppkg.NewOtelHttpTransport()}
+	httpClient := &http.Client{Transport: httppkg.NewHttpClientOtelTransport()}
 
 	grpcUnaryHandler := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		grpcServerTraceID = trace.SpanContextFromContext(ctx).TraceID().String()
