@@ -1,14 +1,20 @@
 package otel
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
+// UnmarshalSpanContextConfig unmarshals JSON data into a SpanContextConfig.
 func UnmarshalSpanContextConfig(data []byte, spanCtxCfg *trace.SpanContextConfig) error {
 	if spanCtxCfg == nil {
 		return fmt.Errorf("unmarshal span context config: nil target")
@@ -63,4 +69,13 @@ func UnmarshalSpanContextConfig(data []byte, spanCtxCfg *trace.SpanContextConfig
 	}
 
 	return nil
+}
+
+// ExtractPropagationsFromRequestHeader extracts trace span context and baggage from HTTP headers.
+func ExtractPropagationsFromRequestHeader(headers http.Header) (trace.SpanContext, baggage.Baggage) {
+	propagator := otel.GetTextMapPropagator()
+	ctx := propagator.Extract(context.Background(), propagation.HeaderCarrier(headers))
+	spanctx := trace.SpanContextFromContext(ctx)
+	baggage := baggage.FromContext(ctx)
+	return spanctx, baggage
 }
