@@ -15,201 +15,23 @@ import (
 )
 
 func setupTestLogger(t *testing.T) {
+	t.Helper()
 	previousLogger := slog.Default()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
 	t.Cleanup(func() {
 		slog.SetDefault(previousLogger)
 	})
 }
 
-func TestUnaryServerLoggingInterceptor(t *testing.T) {
+func TestLoggingInterceptors(t *testing.T) {
 	setupTestLogger(t)
 
 	const bufSize = 1024 * 1024
 	lis := bufconn.Listen(bufSize)
-
-	server := grpc.NewServer(
-		grpc.UnaryInterceptor(UnaryServerLoggingInterceptor()),
-	)
-
-	hs := health.NewServer()
-	healthpb.RegisterHealthServer(server, hs)
-	hs.SetServingStatus("test.Service", healthpb.HealthCheckResponse_SERVING)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	dialer := func(ctx context.Context, address string) (net.Conn, error) {
-		return lis.Dial()
-	}
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
-	defer conn.Close()
-
-	client := healthpb.NewHealthClient(conn)
-	resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
-	if err != nil {
-		t.Fatalf("health check failed: %v", err)
-	}
-
-	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		t.Errorf("expected SERVING status, got %v", resp.Status)
-	}
-}
-
-func TestUnaryClientLoggingInterceptor(t *testing.T) {
-	setupTestLogger(t)
-
-	const bufSize = 1024 * 1024
-	lis := bufconn.Listen(bufSize)
-
-	server := grpc.NewServer()
-	hs := health.NewServer()
-	healthpb.RegisterHealthServer(server, hs)
-	hs.SetServingStatus("test.Service", healthpb.HealthCheckResponse_SERVING)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	dialer := func(ctx context.Context, address string) (net.Conn, error) {
-		return lis.Dial()
-	}
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(UnaryClientLoggingInterceptor()),
-	)
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
-	defer conn.Close()
-
-	client := healthpb.NewHealthClient(conn)
-	resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
-	if err != nil {
-		t.Fatalf("health check failed: %v", err)
-	}
-
-	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		t.Errorf("expected SERVING status, got %v", resp.Status)
-	}
-}
-
-func TestStreamServerLoggingInterceptor(t *testing.T) {
-	setupTestLogger(t)
-
-	const bufSize = 1024 * 1024
-	lis := bufconn.Listen(bufSize)
-
-	server := grpc.NewServer(
-		grpc.StreamInterceptor(StreamServerLoggingInterceptor()),
-	)
-
-	hs := health.NewServer()
-	healthpb.RegisterHealthServer(server, hs)
-	hs.SetServingStatus("test.Service", healthpb.HealthCheckResponse_SERVING)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	dialer := func(ctx context.Context, address string) (net.Conn, error) {
-		return lis.Dial()
-	}
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
-	defer conn.Close()
-
-	client := healthpb.NewHealthClient(conn)
-	stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
-	if err != nil {
-		t.Fatalf("watch failed: %v", err)
-	}
-
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("recv failed: %v", err)
-	}
-
-	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		t.Errorf("expected SERVING status, got %v", resp.Status)
-	}
-}
-
-func TestStreamClientLoggingInterceptor(t *testing.T) {
-	setupTestLogger(t)
-
-	const bufSize = 1024 * 1024
-	lis := bufconn.Listen(bufSize)
-
-	server := grpc.NewServer()
-	hs := health.NewServer()
-	healthpb.RegisterHealthServer(server, hs)
-	hs.SetServingStatus("test.Service", healthpb.HealthCheckResponse_SERVING)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	dialer := func(ctx context.Context, address string) (net.Conn, error) {
-		return lis.Dial()
-	}
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStreamInterceptor(StreamClientLoggingInterceptor()),
-	)
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
-	defer conn.Close()
-
-	client := healthpb.NewHealthClient(conn)
-	stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
-	if err != nil {
-		t.Fatalf("watch failed: %v", err)
-	}
-
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("recv failed: %v", err)
-	}
-
-	if resp.Status != healthpb.HealthCheckResponse_SERVING {
-		t.Errorf("expected SERVING status, got %v", resp.Status)
-	}
-}
-
-func TestBothClientAndServerInterceptors(t *testing.T) {
-	setupTestLogger(t)
-
-	const bufSize = 1024 * 1024
-	lis := bufconn.Listen(bufSize)
+	t.Cleanup(func() {
+		_ = lis.Close()
+	})
 
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(UnaryServerLoggingInterceptor()),
@@ -223,7 +45,7 @@ func TestBothClientAndServerInterceptors(t *testing.T) {
 	go func() {
 		_ = server.Serve(lis)
 	}()
-	defer server.Stop()
+	t.Cleanup(server.Stop)
 
 	dialer := func(ctx context.Context, address string) (net.Conn, error) {
 		return lis.Dial()
@@ -239,22 +61,24 @@ func TestBothClientAndServerInterceptors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
-	defer conn.Close()
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
 
 	client := healthpb.NewHealthClient(conn)
 
-	t.Run("unary", func(t *testing.T) {
+	t.Run("unary success", func(t *testing.T) {
 		resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("health check failed: %v", err)
 		}
 
 		if resp.Status != healthpb.HealthCheckResponse_SERVING {
-			t.Errorf("expected SERVING status, got %v", resp.Status)
+			t.Fatalf("expected SERVING status, got %v", resp.Status)
 		}
 	})
 
-	t.Run("stream", func(t *testing.T) {
+	t.Run("stream success", func(t *testing.T) {
 		stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("watch failed: %v", err)
@@ -266,7 +90,30 @@ func TestBothClientAndServerInterceptors(t *testing.T) {
 		}
 
 		if resp.Status != healthpb.HealthCheckResponse_SERVING {
-			t.Errorf("expected SERVING status, got %v", resp.Status)
+			t.Fatalf("expected SERVING status, got %v", resp.Status)
 		}
+	})
+
+	t.Run("unary error logs debug", func(t *testing.T) {
+
+		_, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "missing.Service"})
+		if err == nil {
+			t.Fatal("expected health check error")
+		}
+
+	})
+
+	t.Run("stream error logs debug", func(t *testing.T) {
+
+		stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
+		if err != nil {
+			t.Fatalf("watch setup failed: %v", err)
+		}
+
+		_, err = stream.Recv()
+		if err != nil {
+			t.Fatalf("stream recv failed: %v", err)
+		}
+
 	})
 }
