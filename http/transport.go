@@ -1,23 +1,28 @@
 package http
 
 import (
-	"fmt"
 	"net/http"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
-// NewOtelHttpTransport creates an HTTP transport with OpenTelemetry instrumentation
-func NewOtelHttpTransport() *otelhttp.Transport {
+// NewHttpClientOtelTransport creates an HTTP transport with OpenTelemetry instrumentation
+// The options passed to the fucntion will override the default options
+func NewHttpClientOtelTransport(base http.RoundTripper, opts ...otelhttp.Option) *otelhttp.Transport {
 	return otelhttp.NewTransport(
-		http.DefaultTransport,
-		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-			return fmt.Sprintf("%s %s%s", r.Method, r.URL.Host, r.URL.Path)
-		}),
+		base,
+		append(
+			[]otelhttp.Option{
+				otelhttp.WithTracerProvider(otel.GetTracerProvider()),
+				otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+			},
+			opts...,
+		)...,
 	)
 }
 
-// NewOtelHttpHandler wraps an HTTP handler with OpenTelemetry instrumentation
-func NewOtelHttpHandler(handler http.Handler, operation string, opts ...otelhttp.Option) http.Handler {
+// NewHttpServerOtelHandler wraps an HTTP handler with OpenTelemetry instrumentation
+func NewHttpServerOtelHandler(handler http.Handler, operation string, opts ...otelhttp.Option) http.Handler {
 	return otelhttp.NewHandler(handler, operation, opts...)
 }

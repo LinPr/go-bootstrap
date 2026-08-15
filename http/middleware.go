@@ -55,8 +55,52 @@ func buildCurlCommand(r *http.Request, body []byte) string {
 	return curl.String()
 }
 
-// ServerLoggingMiddleware logs HTTP request and response details for server
-func ServerLoggingMiddleware(next http.Handler) http.Handler {
+// Middleware defines a function that wraps an http.Handler
+type Middleware func(http.Handler) http.Handler
+
+// HandlerChain wraps a base handler with middleware chain
+type HandlerChain struct {
+	handler     http.Handler
+	middlewares []Middleware
+}
+
+// NewHandlerChain creates a new handler chain with the base handler
+func NewHandlerChain(handler http.Handler) *HandlerChain {
+	return &HandlerChain{
+		handler:     handler,
+		middlewares: make([]Middleware, 0),
+	}
+}
+
+// Use adds middlewares to the chain (executed in order: first added = outermost layer)
+func (c *HandlerChain) Use(middlewares ...Middleware) *HandlerChain {
+	c.middlewares = append(c.middlewares, middlewares...)
+	return c
+}
+
+// Build builds the final handler by applying all middlewares
+func (c *HandlerChain) Build() http.Handler {
+	handler := c.handler
+	for i := len(c.middlewares) - 1; i >= 0; i-- {
+		handler = c.middlewares[i](handler)
+	}
+	return handler
+}
+
+// Chain builds a handler by chaining middlewares (onion model: first = outermost)
+func Chain(handler http.Handler, middlewares ...Middleware) http.Handler {
+	return NewHandlerChain(handler).Use(middlewares...).Build()
+}
+
+// OtelMiddleware wraps handler with OpenTelemetry instrumentation
+func OtelMiddleware(operation string) Middleware {
+	return func(next http.Handler) http.Handler {
+		return NewHttpServerOtelHandler(next, operation)
+	}
+}
+
+// WithServerDebugLog logs HTTP request and response details for server
+func WithServerDebugLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -135,9 +179,9 @@ func (t *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 type ClientOption func(*http.Client)
 
 // WithOtelHttpTransport enables OpenTelemetry instrumentation for HTTP client
-func WithOtelHttpTransport() ClientOption {
+func WithOtelHttpTransport(base http.RoundTripper) ClientOption {
 	return func(c *http.Client) {
-		c.Transport = NewOtelHttpTransport()
+		c.Transport = NewHttpClientOtelTransport(base)
 	}
 }
 
@@ -160,22 +204,4 @@ func NewHttpClient(opts ...ClientOption) *http.Client {
 		opt(client)
 	}
 	return client
-}
-
-// ServerOption configures an HTTP server handler
-type ServerOption func(http.Handler) http.Handler
-
-// WithServerDebugLog enables debug logging for HTTP server requests and responses
-func WithServerDebugLog() ServerOption {
-	return func(next http.Handler) http.Handler {
-		return ServerLoggingMiddleware(next)
-	}
-}
-
-// NewHttpHandler wraps an HTTP handler with the given options
-func NewHttpHandler(handler http.Handler, opts ...ServerOption) http.Handler {
-	for _, opt := range opts {
-		handler = opt(handler)
-	}
-	return handler
 }
