@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package test;
+
+option go_package = "github.com/LinPr/go-bootstrap/test/grpc/api";
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message       = 1;
+  string baggage_value = 2;
+}
+
+message StreamRequest {
+  string message = 1;
+  int32  count   = 2;
+}
+
+message StreamResponse {
+  string message       = 1;
+  int32  index         = 2;
+  string baggage_value = 3;
+}
+
+service TestService {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc StreamEcho(StreamRequest) returns (stream StreamResponse);
+}
