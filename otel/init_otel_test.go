@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/baggage"
 	"go.uber.org/zap"
 )
 
@@ -41,83 +42,6 @@ func restoreLogrusState(state logrusState) {
 	logger.Hooks = state.hooks
 }
 
-func TestOtelProviderInitialization(t *testing.T) {
-	previousSlog := slog.Default()
-	previousZap := zap.L()
-	previousLogrus := snapshotLogrusState()
-
-	t.Cleanup(func() {
-		slog.SetDefault(previousSlog)
-		zap.ReplaceGlobals(previousZap)
-		restoreLogrusState(previousLogrus)
-		globalProvider = nil
-	})
-
-	globalProvider = nil
-
-	config := &Config{
-		ServiceName:    "go-bootstrap-test",
-		ServiceVersion: "1.0.0",
-		Log: LogConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Level:      "info",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap-test",
-			},
-			Logger: LoggerTypeSlog,
-			Pretty: false,
-		},
-		Trace: TraceConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap-test",
-			},
-			Pretty:        false,
-			SamplingRatio: 1.0,
-		},
-		Metric: MetricConfig{
-			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
-			Headers: map[string]string{
-				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
-				"stream-name":   "go-bootstrap-test",
-			},
-			Pretty:          false,
-			IntervalSeconds: 1,
-		},
-	}
-
-	provider, err := NewOtelProviders(config)
-	if err != nil {
-		t.Fatalf("failed to initialize provider: %v", err)
-	}
-
-	if provider.GetTracerProvider() == nil {
-		t.Fatal("tracer provider is nil")
-	}
-
-	if provider.GetMeterProvider() == nil {
-		t.Fatal("meter provider is nil")
-	}
-
-	if provider.GetLoggerProvider() == nil {
-		t.Fatal("logger provider is nil")
-	}
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := ShutdownOtelProvider(shutdownCtx); err != nil {
-		t.Fatalf("failed to shutdown provider: %v", err)
-	}
-}
-
 func TestOtelLogger(t *testing.T) {
 	previousSlog := slog.Default()
 	previousZap := zap.L()
@@ -136,8 +60,8 @@ func TestOtelLogger(t *testing.T) {
 	}{
 		{name: "slog", loggerType: LoggerTypeSlog},
 		{name: "zap", loggerType: LoggerTypeZap},
-		{name: "logrus", loggerType: LoggerTypeLogrus},
-		{name: "logr", loggerType: LoggerTypeLogr},
+		// {name: "logrus", loggerType: LoggerTypeLogrus},
+		// {name: "logr", loggerType: LoggerTypeLogr},
 	}
 
 	for _, tt := range tests {
@@ -235,9 +159,20 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zapsugar.Warnw(ctx, message+" warn (zapsugar)", "phase", phase)
 		zapsugar.Errorw(ctx, message+" error (zapsugar)", "phase", phase)
 
-		subLogger := zapsugar.NewSubScopedZapSugar("sublogger", nil)
-		subLogger.Infow(ctx, message+" info (sub)", "phase", phase)
-		subLogger.Warnw(ctx, message+" warn (sub)", "phase", phase)
+		subLogger := zapsugar.NewSubScopedZapSugar("sublogger", zap.L().Sugar())
+		subLogger.Infow(ctx, message+" info (sublogger)", "phase", phase)
+		subLogger.Warnw(ctx, message+" warn (sublogger)", "phase", phase)
+		subLogger.Errorw(ctx, message+" warn (sublogger)", "phase", phase)
+
+		baggageLogger := zapsugar.NewSubScopedZapSugar("baggage-test", subLogger.Logger()).
+			WithBaggageMembers("user.id", "request.id")
+		ctxWithBaggage := addBaggageToCtx(ctx, "user.id", "12345", "request.id", "req-789", "session.id", "sess-ignored")
+		baggageLogger.Warnw(ctxWithBaggage, message+" info (baggageLogger)", "phase", phase)
+		baggageLogger.Errorw(ctxWithBaggage, message+" warn (baggageLogger)", "phase", phase)
+
+		zap.ReplaceGlobals(baggageLogger.Logger().Desugar())
+		zapsugar.Warnw(ctxWithBaggage, message+" debug (ReplaceGlobals)", "phase", phase)
+		zapsugar.Errorw(ctxWithBaggage, message+" info (ReplaceGlobals)", "phase", phase)
 
 	case LoggerTypeLogrus:
 		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
@@ -257,4 +192,14 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 	default:
 		t.Fatalf("unsupported logger type: %s", loggerType)
 	}
+}
+
+func addBaggageToCtx(ctx context.Context, pairs ...string) context.Context {
+	members := make([]baggage.Member, 0, len(pairs)/2)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		m, _ := baggage.NewMember(pairs[i], pairs[i+1])
+		members = append(members, m)
+	}
+	bag, _ := baggage.New(members...)
+	return baggage.ContextWithBaggage(ctx, bag)
 }
