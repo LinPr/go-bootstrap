@@ -3,99 +3,158 @@ package zapsugar
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/baggage"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-// ZapSUgar wraps zap.SugaredLogger with context-aware logging methods.
-type ZapSUgar struct {
+// ZapSugar wraps zap.SugaredLogger with context-aware logging methods.
+type ZapSugar struct {
 	logger *zap.SugaredLogger
 }
 
-// NewSubScopedZapSugar creates a new ZapSUgar logger with a named scope.
-func NewSubScopedZapSugar(name string, logger *ZapSUgar) *ZapSUgar {
+// NewSubScopedZapSugar creates a new ZapSugar logger with a named scope.
+func NewSubScopedZapSugar(name string, logger *zap.SugaredLogger) *ZapSugar {
 	// If logger is nil, use the global zap.S() logger and create a new sub-scoped logger with the given name.
 	if logger == nil {
-		return &ZapSUgar{
+		return &ZapSugar{
 			logger: zap.S().Named(name),
 		}
 	}
 
 	// Otherwise, create a new sub-scoped logger from the provided logger.
-	return &ZapSUgar{
-		logger: logger.logger.Named(name),
+	return &ZapSugar{
+		logger: logger.Named(name),
 	}
 }
 
+func (s *ZapSugar) Logger() *zap.SugaredLogger {
+	return s.logger
+}
+
+type baggageCoreWrapper struct {
+	zapcore.Core
+	memberSet map[string]struct{}
+}
+
+func newBaggageCoreWrapper(core zapcore.Core, baggageMembers map[string]struct{}) *baggageCoreWrapper {
+	return &baggageCoreWrapper{
+		Core:      core,
+		memberSet: baggageMembers,
+	}
+}
+
+func (b *baggageCoreWrapper) With(fields []zapcore.Field) zapcore.Core {
+	fields = b.extractBaggageMembers(fields)
+
+	return &baggageCoreWrapper{
+		Core:      b.Core.With(fields),
+		memberSet: b.memberSet,
+	}
+}
+
+func (b *baggageCoreWrapper) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	fields = b.extractBaggageMembers(fields)
+	return b.Core.Write(entry, fields)
+}
+
+func (b *baggageCoreWrapper) extractBaggageMembers(fields []zapcore.Field) []zapcore.Field {
+	if len(fields) > 0 {
+		for _, field := range fields {
+			if ctxFld, ok := field.Interface.(context.Context); ok {
+				baggageMembers := baggage.FromContext(ctxFld).Members()
+				for _, member := range baggageMembers {
+					if _, ok := b.memberSet[member.Key()]; ok {
+						fields = append(fields, zap.String(member.Key(), member.Value()))
+					}
+				}
+				break
+			}
+		}
+	}
+	return fields
+}
+
+func (s *ZapSugar) WithBaggageMembers(members ...string) *ZapSugar {
+	logger := s.logger.WithOptions(
+		zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			memberSet := make(map[string]struct{})
+			for _, member := range members {
+				memberSet[member] = struct{}{}
+			}
+			return newBaggageCoreWrapper(core, memberSet)
+		}),
+	)
+	s.logger = logger
+	return s
+}
+
 // WithOptions applies zap options to the logger.
-func (s *ZapSUgar) WithOptions(opts ...zap.Option) *ZapSUgar {
+func (s *ZapSugar) WithOptions(opts ...zap.Option) *ZapSugar {
 	s.logger = s.logger.WithOptions(opts...)
 	return s
 }
 
 // WithAttribute adds a key-value attribute to the logger.
-func (s *ZapSUgar) WithAttribute(name string, args any) *ZapSUgar {
+func (s *ZapSugar) WithAttribute(name string, args any) *ZapSugar {
 	s.logger = s.logger.With(name, args)
 	return s
 }
 
 // Debugw logs a debug message with context and key-value pairs.
-func (s *ZapSUgar) Debugw(ctx context.Context, msg string, args ...any) {
-	s.logger.WithOptions(zap.AddCallerSkip(1)).Debugw(msg, append([]any{"context", ctx}, args...)...)
+func (s *ZapSugar) Debugw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Debugw(msg, args...)
 }
 
 // Infow logs an info message with context and key-value pairs.
-func (s *ZapSUgar) Infow(ctx context.Context, msg string, args ...any) {
-	s.logger.WithOptions(zap.AddCallerSkip(1)).Infow(msg, append([]any{"context", ctx}, args...)...)
+func (s *ZapSugar) Infow(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Infow(msg, args...)
 }
 
 // Warnw logs a warn message with context and key-value pairs.
-func (s *ZapSUgar) Warnw(ctx context.Context, msg string, args ...any) {
-	s.logger.WithOptions(zap.AddCallerSkip(1)).Warnw(msg, append([]any{"context", ctx}, args...)...)
+func (s *ZapSugar) Warnw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Warnw(msg, args...)
 }
 
 // Errorw logs an error message with context and key-value pairs.
-func (s *ZapSUgar) Errorw(ctx context.Context, msg string, args ...any) {
-	s.logger.WithOptions(zap.AddCallerSkip(1)).Errorw(msg, append([]any{"context", ctx}, args...)...)
+func (s *ZapSugar) Errorw(ctx context.Context, msg string, args ...any) {
+	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Errorw(msg, args...)
 }
 
 // Debugf logs a formatted debug message with context.
-func (s *ZapSUgar) Debugf(ctx context.Context, template string, args ...any) {
+func (s *ZapSugar) Debugf(ctx context.Context, template string, args ...any) {
 	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Debugf(template, args...)
 }
 
 // Infof logs a formatted info message with context.
-func (s *ZapSUgar) Infof(ctx context.Context, template string, args ...any) {
+func (s *ZapSugar) Infof(ctx context.Context, template string, args ...any) {
 	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Infof(template, args...)
 }
 
 // Warnf logs a formatted warn message with context.
-func (s *ZapSUgar) Warnf(ctx context.Context, template string, args ...any) {
+func (s *ZapSugar) Warnf(ctx context.Context, template string, args ...any) {
 	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Warnf(template, args...)
 }
 
 // Errorf logs a formatted error message with context.
-func (s *ZapSUgar) Errorf(ctx context.Context, template string, args ...any) {
+func (s *ZapSugar) Errorf(ctx context.Context, template string, args ...any) {
 	s.logger.WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Errorf(template, args...)
 }
 
-// Debugw logs a debug message with context and key-value pairs.
 func Debugw(ctx context.Context, msg string, args ...any) {
-	zap.S().WithOptions(zap.AddCallerSkip(1)).Debugw(msg, append([]any{"context", ctx}, args...)...)
+	zap.S().WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Debugw(msg, args...)
 }
 
-// Infow logs an info message with context and key-value pairs.
 func Infow(ctx context.Context, msg string, args ...any) {
-	zap.S().WithOptions(zap.AddCallerSkip(1)).Infow(msg, append([]any{"context", ctx}, args...)...)
+	zap.S().WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Infow(msg, args...)
 }
 
-// Warnw logs a warn message with context and key-value pairs.
 func Warnw(ctx context.Context, msg string, args ...any) {
-	zap.S().WithOptions(zap.AddCallerSkip(1)).Warnw(msg, append([]any{"context", ctx}, args...)...)
+	zap.S().WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Warnw(msg, args...)
 }
 
-// Errorw logs an error message with context and key-value pairs.
 func Errorw(ctx context.Context, msg string, args ...any) {
-	zap.S().WithOptions(zap.AddCallerSkip(1)).Errorw(msg, append([]any{"context", ctx}, args...)...)
+	zap.S().WithOptions(zap.AddCallerSkip(1)).With("context", ctx).Errorw(msg, args...)
 }
 
 // Debugf logs a formatted debug message with context.
