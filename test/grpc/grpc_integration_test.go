@@ -24,44 +24,27 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func TestGrpcOtelIntegration(t *testing.T) {
-	_ = config.SetupTestOtelProvider(t)
+// startHealthServer starts a bufconn gRPC server with the health service registered.
+// The serverTraceID pointer is written on each unary call for trace propagation assertions.
+func startHealthServer(t *testing.T, serverTraceID *string, meters integrationMeters) *bufconn.Listener {
+	t.Helper()
+	lis := bufconn.Listen(bufSize)
 
-	meter := otelgo.Meter("go-bootstrap-grpc-integration")
-	metricPrefix := "go_bootstrap_grpc_integration_"
-	requestCounter, err := meter.Int64Counter(metricPrefix + "request_counter")
-	if err != nil {
-		t.Fatalf("failed to create request counter: %v", err)
-	}
-	histogram, err := meter.Float64Histogram(metricPrefix + "latency_ms")
-	if err != nil {
-		t.Fatalf("failed to create latency histogram: %v", err)
-	}
-	activeCounter, err := meter.Int64UpDownCounter(metricPrefix + "active_requests")
-	if err != nil {
-		t.Fatalf("failed to create active counter: %v", err)
-	}
-
-	tracer := otelgo.Tracer("grpc-integration-test-tracer")
-
-	var grpcServerTraceID string
-	grpcUnaryHandler := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		grpcServerTraceID = trace.SpanContextFromContext(ctx).TraceID().String()
+	traceCapture := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		*serverTraceID = trace.SpanContextFromContext(ctx).TraceID().String()
 		slog.InfoContext(ctx, "gRPC server received request", "method", info.FullMethod)
-		requestCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
-		histogram.Record(ctx, 21.0, metric.WithAttributes(attribute.String("transport", "grpc-server")))
-		activeCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
-		defer activeCounter.Add(ctx, -1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
+		meters.requests.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
+		meters.latency.Record(ctx, 21.0, metric.WithAttributes(attribute.String("transport", "grpc-server")))
+		meters.active.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
+		defer meters.active.Add(ctx, -1, metric.WithAttributes(attribute.String("transport", "grpc-server")))
 		return handler(ctx, req)
 	}
 
-	const bufSize = 1024 * 1024
-	lis := bufconn.Listen(bufSize)
-	grpcServer := grpc.NewServer(
+	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.StatsHandler(grpcpkg.NewServerMessageSizeStatsHandler()),
 		grpc.ChainUnaryInterceptor(
-			grpcUnaryHandler,
+			traceCapture,
 			grpcpkg.UnaryServerLoggingInterceptor(),
 			grpcpkg.UnaryServerBaggageInterceptor("BaggageKey"),
 		),
@@ -71,70 +54,106 @@ func TestGrpcOtelIntegration(t *testing.T) {
 		),
 	)
 	hs := health.NewServer()
-	healthpb.RegisterHealthServer(grpcServer, hs)
+	healthpb.RegisterHealthServer(srv, hs)
 	hs.SetServingStatus("integration.Service", healthpb.HealthCheckResponse_SERVING)
 
+	t.Cleanup(func() { srv.GracefulStop() })
 	go func() {
-		_ = grpcServer.Serve(lis)
+		_ = srv.Serve(lis)
 	}()
-	defer grpcServer.Stop()
+	return lis
+}
 
-	dialer := func(ctx context.Context, address string) (net.Conn, error) {
-		return lis.Dial()
-	}
+// newHealthClient creates a gRPC health client connected via bufconn.
+func newHealthClient(t *testing.T, lis *bufconn.Listener) healthpb.HealthClient {
+	t.Helper()
 	conn, err := grpc.NewClient(
 		"passthrough:///bufnet",
-		grpc.WithContextDialer(dialer),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		grpc.WithStatsHandler(grpcpkg.NewClientMessageSizeStatsHandler()),
 	)
-
 	if err != nil {
-		t.Fatalf("grpc dial failed: %v", err)
+		t.Fatalf("failed to create grpc client: %v", err)
 	}
-	defer conn.Close()
+	t.Cleanup(func() { conn.Close() })
+	return healthpb.NewHealthClient(conn)
+}
 
-	grpcClient := healthpb.NewHealthClient(conn)
+// integrationMeters groups the OTel instruments used by TestGrpcOtelIntegration.
+type integrationMeters struct {
+	requests metric.Int64Counter
+	latency  metric.Float64Histogram
+	active   metric.Int64UpDownCounter
+}
+
+func newIntegrationMeters(t *testing.T) integrationMeters {
+	t.Helper()
+	meter := otelgo.Meter("go-bootstrap-grpc-integration")
+	prefix := "go_bootstrap_grpc_integration_"
+
+	requests, err := meter.Int64Counter(prefix + "request_counter")
+	if err != nil {
+		t.Fatalf("failed to create request counter: %v", err)
+	}
+	latency, err := meter.Float64Histogram(prefix + "latency_ms")
+	if err != nil {
+		t.Fatalf("failed to create latency histogram: %v", err)
+	}
+	active, err := meter.Int64UpDownCounter(prefix + "active_requests")
+	if err != nil {
+		t.Fatalf("failed to create active counter: %v", err)
+	}
+	return integrationMeters{requests: requests, latency: latency, active: active}
+}
+
+func TestGrpcOtelIntegration(t *testing.T) {
+	_ = config.SetupTestOtelProvider(t)
+
+	meters := newIntegrationMeters(t)
+	tracer := otelgo.Tracer("grpc-integration-test-tracer")
+
+	var serverTraceID string
+	lis := startHealthServer(t, &serverTraceID, meters)
+	grpcClient := newHealthClient(t, lis)
 
 	const iterations = 5
 	for i := 0; i < iterations; i++ {
 		rootCtx, rootSpan := tracer.Start(context.Background(), fmt.Sprintf("grpc-integration-root-%d", i))
 		rootTraceID := rootSpan.SpanContext().TraceID().String()
-
 		slog.InfoContext(rootCtx, "Starting gRPC integration test iteration", "iteration", i, "trace_id", rootTraceID)
 
 		grpcCtx, grpcSpan := tracer.Start(rootCtx, "grpc-client-call")
 		slog.InfoContext(grpcCtx, "Sending gRPC health check", "iteration", i, "service", "integration.Service")
-		md := metadata.Pairs("BaggageKey", "test-baggage-value")
-		grpcCtx = metadata.NewOutgoingContext(grpcCtx, md)
-		resp, err := grpcClient.Check(
-			grpcCtx, &healthpb.HealthCheckRequest{Service: "integration.Service"},
-		)
+		grpcCtx = metadata.NewOutgoingContext(grpcCtx, metadata.Pairs("BaggageKey", "test-baggage-value"))
+
+		resp, err := grpcClient.Check(grpcCtx, &healthpb.HealthCheckRequest{Service: "integration.Service"})
 		if err != nil {
 			t.Fatalf("iteration %d: grpc health check failed: %v", i, err)
 		}
 		if resp.Status != healthpb.HealthCheckResponse_SERVING {
 			t.Fatalf("iteration %d: unexpected grpc status: %v", i, resp.Status)
 		}
-		requestCounter.Add(grpcCtx, 1, metric.WithAttributes(attribute.String("transport", "grpc-client")))
-		histogram.Record(grpcCtx, 34.0, metric.WithAttributes(attribute.String("transport", "grpc-client")))
+		meters.requests.Add(grpcCtx, 1, metric.WithAttributes(attribute.String("transport", "grpc-client")))
+		meters.latency.Record(grpcCtx, 34.0, metric.WithAttributes(attribute.String("transport", "grpc-client")))
 		grpcSpan.End()
 
-		requestCounter.Add(rootCtx, 1, metric.WithAttributes(attribute.String("transport", "root")))
-		histogram.Record(rootCtx, 5.0, metric.WithAttributes(attribute.String("transport", "root")))
-		activeCounter.Add(rootCtx, 1, metric.WithAttributes(attribute.String("transport", "root")))
-		activeCounter.Add(rootCtx, -1, metric.WithAttributes(attribute.String("transport", "root")))
-
+		meters.requests.Add(rootCtx, 1, metric.WithAttributes(attribute.String("transport", "root")))
+		meters.latency.Record(rootCtx, 5.0, metric.WithAttributes(attribute.String("transport", "root")))
+		meters.active.Add(rootCtx, 1, metric.WithAttributes(attribute.String("transport", "root")))
+		meters.active.Add(rootCtx, -1, metric.WithAttributes(attribute.String("transport", "root")))
 		rootSpan.End()
 		slog.InfoContext(rootCtx, "Completed gRPC integration test iteration", "iteration", i)
 
 		if i == 0 {
-			if grpcServerTraceID == "" {
+			if serverTraceID == "" {
 				t.Fatal("grpc server trace id is empty")
 			}
-			if grpcServerTraceID != rootTraceID {
-				t.Fatalf("expected grpc trace id %s, got %s", rootTraceID, grpcServerTraceID)
+			if serverTraceID != rootTraceID {
+				t.Fatalf("expected grpc trace id %s, got %s", rootTraceID, serverTraceID)
 			}
 		}
 

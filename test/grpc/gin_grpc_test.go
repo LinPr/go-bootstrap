@@ -3,9 +3,7 @@ package test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -19,45 +17,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel/baggage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
 const bufSize = 1024 * 1024
-
-// localTestServiceServer is a local implementation of api.TestService for this package.
-type localTestServiceServer struct {
-	api.UnimplementedTestServiceServer
-}
-
-func (s *localTestServiceServer) Echo(ctx context.Context, req *api.EchoRequest) (*api.EchoResponse, error) {
-	bag := baggage.FromContext(ctx)
-	baggageValue := bag.Member("BaggageKey").Value()
-	slog.InfoContext(ctx, "gin_grpc Echo called")
-	return &api.EchoResponse{
-		Message:      fmt.Sprintf("Echo: %s", req.Message),
-		BaggageValue: baggageValue,
-	}, nil
-}
-
-func (s *localTestServiceServer) StreamEcho(req *api.StreamRequest, stream api.TestService_StreamEchoServer) error {
-	ctx := stream.Context()
-	bag := baggage.FromContext(ctx)
-	baggageValue := bag.Member("BaggageKey").Value()
-	slog.InfoContext(ctx, "gin_grpc StreamEcho called")
-	for i := int32(0); i < req.Count; i++ {
-		if err := stream.Send(&api.StreamResponse{
-			Message:      fmt.Sprintf("Stream %s", req.Message),
-			Index:        i,
-			BaggageValue: baggageValue,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 // startGrpcServer starts an in-process gRPC server using bufconn and returns the listener.
 func startGrpcServer(t *testing.T) *bufconn.Listener {
@@ -75,7 +40,7 @@ func startGrpcServer(t *testing.T) *bufconn.Listener {
 			grpcpkg.StreamServerLoggingInterceptor(),
 		),
 	)
-	api.RegisterTestServiceServer(srv, &localTestServiceServer{})
+	api.RegisterTestServiceServer(srv, &testServiceServer{})
 	t.Cleanup(func() { srv.GracefulStop() })
 	go func() {
 		if err := srv.Serve(lis); err != nil {
