@@ -166,6 +166,7 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 				LoggerProvider: p.logProvider,
 				minSeverity:    otellog.Severity(slogLevel),
 			}),
+			otelslog.WithSource(true),
 		)
 
 		logger := slog.New(handler)
