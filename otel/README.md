@@ -76,24 +76,30 @@ Supports multiple popular Go logging libraries with automatic context propagatio
 The `zapsugar` package provides a convenient wrapper for zap that automatically extracts span context from `context.Context`:
 
 ```go
-import "github.com/LinPr/go-bootstrap/otel/zapsugar"
+import (
+	"github.com/LinPr/go-bootstrap/otel/zapsugar"
+	"go.uber.org/zap"
+)
 
 // Package-level functions
 zapsugar.Infow(ctx, "user logged in", "user_id", 123)
 zapsugar.Errorf(ctx, "failed to process request: %v", err)
 
-// Scoped loggers for different modules
+// Scoped loggers for different modules (pass nil to use the global zap logger)
 moduleLogger := zapsugar.NewSubScopedZapSugar("auth-module", nil)
 moduleLogger.Infow(ctx, "authentication successful", "method", "oauth2")
 
-// Nested scopes
-subLogger := zapsugar.NewSubScopedZapSugar("token-validator", moduleLogger)
+// Nested scopes reuse an existing *zap.SugaredLogger
+subLogger := zapsugar.NewSubScopedZapSugar("token-validator", moduleLogger.Logger())
 subLogger.Debugw(ctx, "validating token", "issuer", "auth0")
 
 // Add persistent attributes
 requestLogger := moduleLogger.WithAttribute("request_id", "req-12345")
 requestLogger.Infow(ctx, "processing request")
-requestLogger.Warnw(ctx, "rate limit exceeded")
+
+// Extract OpenTelemetry baggage members into log fields
+baggageLogger := moduleLogger.WithBaggageMembers("user.id", "request.id")
+baggageLogger.Infow(ctx, "handling request") // adds user.id / request.id if present in baggage
 ```
 
 ### HTTP and gRPC Instrumentation
