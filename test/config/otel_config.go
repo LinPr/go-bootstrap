@@ -21,8 +21,8 @@ func NewTestOtelConfig() *otel.Config {
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "go-bootstrap",
 			},
-			Logger: otel.LoggerTypeSlog,
-			Pretty: false,
+			Logger:             otel.LoggerTypeSlog,
+			Pretty:             true,
 		},
 		Trace: otel.TraceConfig{
 			Enable:     true,

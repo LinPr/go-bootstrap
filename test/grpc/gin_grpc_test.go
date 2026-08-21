@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	ginpkg "github.com/LinPr/go-bootstrap/gin"
-	grpcpkg "github.com/LinPr/go-bootstrap/grpc"
+	bsgin "github.com/LinPr/go-bootstrap/gin"
+	bsgrpcbaggage "github.com/LinPr/go-bootstrap/grpc/baggage"
+	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
+	bsgrpcstats "github.com/LinPr/go-bootstrap/grpc/stats_handler"
 	"github.com/LinPr/go-bootstrap/test/config"
 	"github.com/LinPr/go-bootstrap/test/grpc/api"
 	"github.com/gin-gonic/gin"
@@ -30,14 +33,14 @@ func startGrpcServer(t *testing.T) *bufconn.Listener {
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.StatsHandler(grpcpkg.NewServerMessageSizeStatsHandler()),
+		grpc.StatsHandler(bsgrpcstats.NewServerMessageSizeStatsHandler()),
 		grpc.ChainUnaryInterceptor(
-			grpcpkg.UnaryServerBaggageInterceptor("BaggageKey"),
-			grpcpkg.UnaryServerLoggingInterceptor(),
+			bsgrpcbaggage.UnaryServerBaggageInterceptor("BaggageKey"),
+			bsgrpclogging.UnaryServerLoggingInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
-			grpcpkg.StreamServerBaggageInterceptor("BaggageKey"),
-			grpcpkg.StreamServerLoggingInterceptor(),
+			bsgrpcbaggage.StreamServerBaggageInterceptor("BaggageKey"),
+			bsgrpclogging.StreamServerLoggingInterceptor(),
 		),
 	)
 	api.RegisterTestServiceServer(srv, &testServiceServer{})
@@ -60,7 +63,9 @@ func newGrpcClient(t *testing.T, lis *bufconn.Listener) api.TestServiceClient {
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-		grpc.WithStatsHandler(grpcpkg.NewClientMessageSizeStatsHandler()),
+		grpc.WithStatsHandler(bsgrpcstats.NewClientMessageSizeStatsHandler()),
+		grpc.WithUnaryInterceptor(bsgrpclogging.UnaryClientLoggingInterceptor()),
+		grpc.WithStreamInterceptor(bsgrpclogging.StreamClientLoggingInterceptor()),
 	)
 	if err != nil {
 		t.Fatalf("failed to create grpc client: %v", err)
@@ -74,12 +79,19 @@ func setupGinRouter(grpcClient api.TestServiceClient) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(otelgin.Middleware("gin-grpc-test"))
-	r.Use(ginpkg.WithOtelBaggageFromHeader("BaggageKey"))
+	r.Use(bsgin.WithOtelBaggageFromHeader("BaggageKey"))
 
 	r.GET("/echo", func(c *gin.Context) {
+		type testCase struct {
+			Name   string
+			method string
+		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 		defer cancel()
-
+		j, _ := json.MarshalIndent(c.Request.Header, "", "  ")
+		slog.InfoContext(ctx, "Handling /echo request", "req_header", string(j))
+		logger := slog.Default().WithGroup("router_zzzzz")
+		logger.InfoContext(ctx, "Handling /echo request", "req_header", string(j))
 		resp, err := grpcClient.Echo(ctx, &api.EchoRequest{Message: "hello"})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -134,6 +146,7 @@ func TestGinGrpcIntegration(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	t.Run("UnaryEchoWithBaggage", func(t *testing.T) {
+
 		req, err := http.NewRequest(http.MethodGet, ts.URL+"/echo", nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
