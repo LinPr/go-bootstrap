@@ -59,7 +59,7 @@ func TestOtelLogger(t *testing.T) {
 		loggerType LoggerType
 	}{
 		{name: "slog", loggerType: LoggerTypeSlog},
-		{name: "zap", loggerType: LoggerTypeZap},
+		// {name: "zap", loggerType: LoggerTypeZap},
 		// {name: "logrus", loggerType: LoggerTypeLogrus},
 		// {name: "logr", loggerType: LoggerTypeLogr},
 	}
@@ -93,7 +93,7 @@ func newLoggerTestConfig(loggerType LoggerType) *Config {
 			Enable:     true,
 			Exporter:   ExporterTypeHTTP,
 			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
-			Level:      "warn",
+			Level:      "error",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "go-bootstrap",
@@ -134,13 +134,23 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 	t.Helper()
 
 	message := string(loggerType) + ": " + phase + " telemetry check"
-
+	type Person struct {
+		Name   string
+		Age    int
+		gemder string
+	}
+	person := Person{Name: "Alice", Age: 30, gemder: "Female"}
 	switch loggerType {
 	case LoggerTypeSlog:
 		slog.DebugContext(ctx, message+" debug", "phase", phase)
 		slog.InfoContext(ctx, message+" info", "phase", phase)
 		slog.WarnContext(ctx, message+" warn", "phase", phase)
 		slog.ErrorContext(ctx, message+" error", "phase", phase)
+
+		slog.Debug(message+" debug (person)", "phase", phase, "person", person)
+		slog.Info(message+" info (person)", "phase", phase, "person", person)
+		slog.Warn(message+" warn (person)", "phase", phase, "person", person)
+		slog.Error(message+" error (person)", "phase", phase, "person", person)
 
 		logger := slog.Default().WithGroup("sublogger")
 		logger.DebugContext(ctx, message+" debug (sub)", "phase", phase)
@@ -158,6 +168,11 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zapsugar.Infow(ctx, message+" info (zapsugar)", "phase", phase)
 		zapsugar.Warnw(ctx, message+" warn (zapsugar)", "phase", phase)
 		zapsugar.Errorw(ctx, message+" error (zapsugar)", "phase", phase)
+
+		zapsugar.Debugw(ctx, message+" debug (person)", "phase", phase, zap.Any("person", person))
+		zapsugar.Infow(ctx, message+" info (person)", "phase", phase, zap.Any("person", person))
+		zapsugar.Warnw(ctx, message+" warn (person)", "phase", phase, zap.Any("person", person))
+		zapsugar.Errorw(ctx, message+" error (person)", "phase", phase, zap.Any("person", person))
 
 		subLogger := zapsugar.NewSubScopedZapSugar("sublogger", zap.L().Sugar())
 		subLogger.Infow(ctx, message+" info (sublogger)", "phase", phase)

@@ -50,7 +50,7 @@ type LogConfig struct {
 	RemoteAddr string
 	// Headers contains request headers for HTTP and gRPC.
 	Headers map[string]string
-	// Pretty enables pretty output for stdout only.
+	// Pretty enables pretty output for stdout and pretty attribute formatting for HTTP and gRPC.
 	Pretty bool
 }
 

@@ -25,7 +25,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 
-	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
@@ -130,19 +129,33 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 		return fmt.Errorf("failed to create log exporter: %w", err)
 	}
 
+	var processor log.Processor
+	processor = log.NewBatchProcessor(
+		logExporter,
+	)
+	if logConfig.Logger == LoggerTypeSlog {
+		slogSeverity, _, _, err := parseLogLevel(logConfig.Level)
+		if err != nil {
+			return err
+		}
+		processor = newSeverityProcessor(
+			processor,
+			slogSeverity,
+		)
+	}
+
 	p.logProvider = log.NewLoggerProvider(
 		log.WithProcessor(
-			log.NewBatchProcessor(
-				logExporter,
-			),
+			processor,
 		),
 		log.WithResource(res),
+		log.WithAttributeCountLimit(50),
 	)
 
 	global.SetLoggerProvider(p.logProvider)
 
 	// Configure the global log bridge based on the selected logger type.
-	if err := p.setupLoggerBridge(logConfig.Logger, logConfig.Level); err != nil {
+	if err := p.setupLoggerBridge(logConfig); err != nil {
 		return fmt.Errorf("failed to setup logger bridge: %w", err)
 	}
 
@@ -151,35 +164,33 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 }
 
 // setupLoggerBridge configures the log bridge.
-func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) error {
-	slogLevel, zapLevel, logrusLevel, err := parseLogLevel(level)
+func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
+
+	_, zapLevel, logrusLevel, err := parseLogLevel(logConfig.Level)
 	if err != nil {
 		return err
 	}
 
-	switch loggerType {
+	switch logConfig.Logger {
 	case LoggerTypeSlog:
-
-		handler := otelslog.NewHandler(
+		var handler slog.Handler
+		handler = otelslog.NewHandler(
 			"global",
-			otelslog.WithLoggerProvider(otelLogProvider{
-				LoggerProvider: p.logProvider,
-				minSeverity:    otellog.Severity(slogLevel),
-			}),
+			otelslog.WithLoggerProvider(p.logProvider),
 			otelslog.WithSource(true),
 		)
+
+		// Wrap the otelslog handler so struct/map/slice attributes are JSON
+		// encoded here, before the bridge flattens them via fmt %+v.
+		if logConfig.Pretty {
+			handler = newjsonHandler(handler, logConfig.Pretty)
+		}
 
 		logger := slog.New(handler)
 		slog.SetDefault(logger)
 
-		// logger := otelslog.NewLogger(
-		// 	"global",
-		// 	otelslog.WithLoggerProvider(p.logProvider),
-		// 	otelslog.WithSource(true),
-		// )
-		// slog.SetDefault(logger)
-
 	case LoggerTypeZap:
+		zap.NewExample()
 		logger := zap.New(
 			otelzap.NewCore(
 				"global",
@@ -212,15 +223,14 @@ func (p *OtelProviders) setupLoggerBridge(loggerType LoggerType, level string) e
 			"global",
 			otellogr.WithLoggerProvider(p.logProvider),
 		)
-
 		// logr instances are managed by the caller; this only creates an example.
 		loggger := logr.New(logSink)
 		// TODO:
-		_ = loggger // Avoid unused warnings; applications can use this logger.
-		_ = level   // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
+		_ = loggger     // Avoid unused warnings; applications can use this logger.
+		_ = logrusLevel // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
 		// otel.SetLogger(loggger)
 	default:
-		return fmt.Errorf("unsupported logger type: %s", loggerType)
+		return fmt.Errorf("unsupported logger type: %s", logConfig.Logger)
 	}
 
 	return nil
@@ -332,6 +342,7 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 			metric.WithReader(promeExporter),
 			metric.WithResource(res),
 			metric.WithExemplarFilter(exemplar.TraceBasedFilter),
+			// metric.WithCardinalityLimit(2000),
 		)
 
 	} else {
