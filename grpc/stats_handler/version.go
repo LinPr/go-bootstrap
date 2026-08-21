@@ -1,4 +1,4 @@
-package grpc
+package stats_handler
 
 var (
 	// Version is the current release version of the go-bootstrap/http library.

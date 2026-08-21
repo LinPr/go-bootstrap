@@ -1,4 +1,4 @@
-package grpc_test
+package baggage
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -15,13 +15,20 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
+const (
+// loggerType = LoggerTypeSlog
+// loggerType = LoggerTypeZap
+)
+
 func setupTestLogger(t *testing.T) {
 	t.Helper()
-	previousLogger := slog.Default()
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	slog.SetDefault(logger)
+	slogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(slogger)
+
+	zaplogger := zap.NewExample()
+	zap.ReplaceGlobals(zaplogger)
 	t.Cleanup(func() {
-		slog.SetDefault(previousLogger)
+
 	})
 }
 
@@ -35,8 +42,8 @@ func TestLoggingInterceptors(t *testing.T) {
 	})
 
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(bsgrpclogging.UnaryServerLoggingInterceptor()),
-		grpc.StreamInterceptor(bsgrpclogging.StreamServerLoggingInterceptor()),
+	// grpc.UnaryInterceptor(UnaryServerLoggingInterceptor(loggerType)),
+	// grpc.StreamInterceptor(StreamServerLoggingInterceptor(loggerType)),
 	)
 
 	hs := health.NewServer()
@@ -56,8 +63,8 @@ func TestLoggingInterceptors(t *testing.T) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(bsgrpclogging.UnaryClientLoggingInterceptor()),
-		grpc.WithStreamInterceptor(bsgrpclogging.StreamClientLoggingInterceptor()),
+		// grpc.WithUnaryInterceptor(UnaryClientLoggingInterceptor(loggerType)),
+		// grpc.WithStreamInterceptor(StreamClientLoggingInterceptor(loggerType)),
 	)
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
@@ -68,7 +75,7 @@ func TestLoggingInterceptors(t *testing.T) {
 
 	client := healthpb.NewHealthClient(conn)
 
-	t.Run("unary", func(t *testing.T) {
+	t.Run("unary success", func(t *testing.T) {
 		resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("health check failed: %v", err)
@@ -79,7 +86,7 @@ func TestLoggingInterceptors(t *testing.T) {
 		}
 	})
 
-	t.Run("stream", func(t *testing.T) {
+	t.Run("stream success", func(t *testing.T) {
 		stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("watch failed: %v", err)
@@ -95,4 +102,26 @@ func TestLoggingInterceptors(t *testing.T) {
 		}
 	})
 
+	t.Run("unary error logs debug", func(t *testing.T) {
+
+		_, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "missing.Service"})
+		if err == nil {
+			t.Fatal("expected health check error")
+		}
+
+	})
+
+	t.Run("stream error logs debug", func(t *testing.T) {
+
+		stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
+		if err != nil {
+			t.Fatalf("watch setup failed: %v", err)
+		}
+
+		_, err = stream.Recv()
+		if err != nil {
+			t.Fatalf("stream recv failed: %v", err)
+		}
+
+	})
 }

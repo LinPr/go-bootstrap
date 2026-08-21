@@ -1,4 +1,4 @@
-package grpc
+package logging
 
 import (
 	"context"
@@ -12,11 +12,20 @@ import (
 func UnaryClientLoggingInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		if err := invoker(ctx, method, req, reply, cc, opts...); err != nil {
-			slog.DebugContext(ctx, fmt.Sprintf("grpc client unary invoke: %s error: %s", method, err.Error()), "request", req)
+			slog.ErrorContext(ctx,
+				fmt.Sprintf("grpc client unary invoke: %s error: %s", method, err.Error()),
+				"peer", peerAddr(ctx),
+				"request", req,
+			)
 			return err
 		}
 
-		slog.DebugContext(ctx, fmt.Sprintf("grpc client unary invoke: %s", method), "grpc_request", req, "grpc_response", reply)
+		slog.DebugContext(ctx,
+			fmt.Sprintf("grpc client unary invoke: %s", method),
+			"peer", peerAddr(ctx),
+			"grpc_request", req,
+			"grpc_response", reply,
+		)
 		return nil
 	}
 }
@@ -39,11 +48,39 @@ type loggingClientStream struct {
 }
 
 func (s *loggingClientStream) RecvMsg(m any) error {
-	defer slog.DebugContext(s.ClientStream.Context(), "grpc client stream recv: "+s.method, "stream_recv", m)
-	return s.ClientStream.RecvMsg(m)
+	ctx := s.ClientStream.Context()
+	if err := s.ClientStream.RecvMsg(m); err != nil {
+		slog.ErrorContext(ctx,
+			fmt.Sprintf("grpc client stream recv: %s, error: %s", s.method, err.Error()),
+			"peer", peerAddr(ctx),
+			"stream_recv", m,
+		)
+		return err
+	}
+
+	slog.DebugContext(ctx,
+		"grpc client stream recv: "+s.method,
+		"peer", peerAddr(ctx),
+		"stream_recv", m,
+	)
+	return nil
 }
 
 func (s *loggingClientStream) SendMsg(m any) error {
-	defer slog.DebugContext(s.ClientStream.Context(), "grpc client stream send: "+s.method, "stream_send", m)
-	return s.ClientStream.SendMsg(m)
+	ctx := s.ClientStream.Context()
+	if err := s.ClientStream.SendMsg(m); err != nil {
+		slog.ErrorContext(ctx,
+			fmt.Sprintf("grpc client stream send: %s, error: %s", s.method, err.Error()),
+			"peer", peerAddr(ctx),
+			"stream_send", m,
+		)
+		return err
+	}
+
+	slog.DebugContext(ctx,
+		"grpc client stream send: "+s.method,
+		"peer", peerAddr(ctx),
+		"stream_send", m,
+	)
+	return nil
 }
