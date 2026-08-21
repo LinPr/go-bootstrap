@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
+	bsgrpc "github.com/LinPr/go-bootstrap/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -35,8 +35,8 @@ func TestLoggingInterceptors(t *testing.T) {
 	})
 
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(bsgrpclogging.UnaryServerLoggingInterceptor()),
-		grpc.StreamInterceptor(bsgrpclogging.StreamServerLoggingInterceptor()),
+		grpc.UnaryInterceptor(bsgrpc.UnaryServerLoggingInterceptor()),
+		grpc.StreamInterceptor(bsgrpc.StreamServerLoggingInterceptor()),
 	)
 
 	hs := health.NewServer()
@@ -56,8 +56,8 @@ func TestLoggingInterceptors(t *testing.T) {
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(bsgrpclogging.UnaryClientLoggingInterceptor()),
-		grpc.WithStreamInterceptor(bsgrpclogging.StreamClientLoggingInterceptor()),
+		grpc.WithUnaryInterceptor(bsgrpc.UnaryClientLoggingInterceptor()),
+		grpc.WithStreamInterceptor(bsgrpc.StreamClientLoggingInterceptor()),
 	)
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)

@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	bsgrpcbaggage "github.com/LinPr/go-bootstrap/grpc/baggage"
-	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
+	bsgrpc "github.com/LinPr/go-bootstrap/grpc"
 	"github.com/LinPr/go-bootstrap/otel"
 	"github.com/LinPr/go-bootstrap/test/config"
 	"github.com/LinPr/go-bootstrap/test/grpc/api"
@@ -30,12 +29,12 @@ func TestGrpcBaggageInterceptor(t *testing.T) {
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
-			bsgrpclogging.UnaryServerLoggingInterceptor(),
-			bsgrpcbaggage.UnaryServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.UnaryServerLoggingInterceptor(),
+			bsgrpc.UnaryServerBaggageInterceptor("BaggageKey"),
 		),
 		grpc.ChainStreamInterceptor(
-			bsgrpclogging.StreamServerLoggingInterceptor(),
-			bsgrpcbaggage.StreamServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.StreamServerLoggingInterceptor(),
+			bsgrpc.StreamServerBaggageInterceptor("BaggageKey"),
 		),
 	)
 	api.RegisterTestServiceServer(grpcServer, testSvc)

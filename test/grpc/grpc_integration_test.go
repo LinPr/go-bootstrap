@@ -8,9 +8,7 @@ import (
 	"testing"
 	"time"
 
-	bsgrpcbaggage "github.com/LinPr/go-bootstrap/grpc/baggage"
-	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
-	bsgrpcstats "github.com/LinPr/go-bootstrap/grpc/stats_handler"
+	bsgrpc "github.com/LinPr/go-bootstrap/grpc"
 	"github.com/LinPr/go-bootstrap/otel"
 	"github.com/LinPr/go-bootstrap/test/config"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -44,15 +42,15 @@ func startHealthServer(t *testing.T, serverTraceID *string, meters integrationMe
 
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.StatsHandler(bsgrpcstats.NewServerMessageSizeStatsHandler()),
+		grpc.StatsHandler(bsgrpc.NewServerMessageSizeStatsHandler()),
 		grpc.ChainUnaryInterceptor(
 			traceCapture,
-			bsgrpclogging.UnaryServerLoggingInterceptor(),
-			bsgrpcbaggage.UnaryServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.UnaryServerLoggingInterceptor(),
+			bsgrpc.UnaryServerBaggageInterceptor("BaggageKey"),
 		),
 		grpc.ChainStreamInterceptor(
-			bsgrpclogging.StreamServerLoggingInterceptor(),
-			bsgrpcbaggage.StreamServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.StreamServerLoggingInterceptor(),
+			bsgrpc.StreamServerBaggageInterceptor("BaggageKey"),
 		),
 	)
 	hs := health.NewServer()
@@ -76,7 +74,7 @@ func newHealthClient(t *testing.T, lis *bufconn.Listener) healthpb.HealthClient 
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-		grpc.WithStatsHandler(bsgrpcstats.NewClientMessageSizeStatsHandler()),
+		grpc.WithStatsHandler(bsgrpc.NewClientMessageSizeStatsHandler()),
 	)
 	if err != nil {
 		t.Fatalf("failed to create grpc client: %v", err)

@@ -12,9 +12,7 @@ import (
 	"time"
 
 	bsgin "github.com/LinPr/go-bootstrap/gin"
-	bsgrpcbaggage "github.com/LinPr/go-bootstrap/grpc/baggage"
-	bsgrpclogging "github.com/LinPr/go-bootstrap/grpc/logging"
-	bsgrpcstats "github.com/LinPr/go-bootstrap/grpc/stats_handler"
+	bsgrpc "github.com/LinPr/go-bootstrap/grpc"
 	"github.com/LinPr/go-bootstrap/test/config"
 	"github.com/LinPr/go-bootstrap/test/grpc/api"
 	"github.com/gin-gonic/gin"
@@ -33,14 +31,14 @@ func startGrpcServer(t *testing.T) *bufconn.Listener {
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.StatsHandler(bsgrpcstats.NewServerMessageSizeStatsHandler()),
+		grpc.StatsHandler(bsgrpc.NewServerMessageSizeStatsHandler()),
 		grpc.ChainUnaryInterceptor(
-			bsgrpcbaggage.UnaryServerBaggageInterceptor("BaggageKey"),
-			bsgrpclogging.UnaryServerLoggingInterceptor(),
+			bsgrpc.UnaryServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.UnaryServerLoggingInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
-			bsgrpcbaggage.StreamServerBaggageInterceptor("BaggageKey"),
-			bsgrpclogging.StreamServerLoggingInterceptor(),
+			bsgrpc.StreamServerBaggageInterceptor("BaggageKey"),
+			bsgrpc.StreamServerLoggingInterceptor(),
 		),
 	)
 	api.RegisterTestServiceServer(srv, &testServiceServer{})
@@ -63,9 +61,9 @@ func newGrpcClient(t *testing.T, lis *bufconn.Listener) api.TestServiceClient {
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-		grpc.WithStatsHandler(bsgrpcstats.NewClientMessageSizeStatsHandler()),
-		grpc.WithUnaryInterceptor(bsgrpclogging.UnaryClientLoggingInterceptor()),
-		grpc.WithStreamInterceptor(bsgrpclogging.StreamClientLoggingInterceptor()),
+		grpc.WithStatsHandler(bsgrpc.NewClientMessageSizeStatsHandler()),
+		grpc.WithUnaryInterceptor(bsgrpc.UnaryClientLoggingInterceptor()),
+		grpc.WithStreamInterceptor(bsgrpc.StreamClientLoggingInterceptor()),
 	)
 	if err != nil {
 		t.Fatalf("failed to create grpc client: %v", err)
