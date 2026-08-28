@@ -121,8 +121,8 @@ func TestGrpcOtelIntegration(t *testing.T) {
 	grpcClient := newHealthClient(t, lis)
 
 	const iterations = 5
-	for i := 0; i < iterations; i++ {
-		rootCtx, rootSpan := tracer.Start(context.Background(), fmt.Sprintf("grpc-integration-root-%d", i))
+	for i := range iterations {
+		rootCtx, rootSpan := tracer.Start(t.Context(), fmt.Sprintf("grpc-integration-root-%d", i))
 		rootTraceID := rootSpan.SpanContext().TraceID().String()
 		slog.InfoContext(rootCtx, "Starting gRPC integration test iteration", "iteration", i, "trace_id", rootTraceID)
 
@@ -162,7 +162,7 @@ func TestGrpcOtelIntegration(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	if err := otel.ShutdownOtelProvider(shutdownCtx); err != nil {
 		t.Logf("warning: failed to shutdown provider: %v", err)

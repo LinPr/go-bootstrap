@@ -17,7 +17,7 @@ func (s *testServiceServer) Echo(ctx context.Context, req *api.EchoRequest) (*ap
 	bag := baggage.FromContext(ctx)
 	baggageValue := bag.Member("BaggageKey").Value()
 
-	slog.InfoContext(ctx, "Echo method called")
+	slog.InfoContext(ctx, "Unary Echo method called, baggage kv"+fmt.Sprintf("BaggageKey=%s", baggageValue))
 
 	return &api.EchoResponse{
 		Message:      fmt.Sprintf("Echo: %s", req.Message),
@@ -30,9 +30,9 @@ func (s *testServiceServer) StreamEcho(req *api.StreamRequest, stream api.TestSe
 	bag := baggage.FromContext(ctx)
 	baggageValue := bag.Member("BaggageKey").Value()
 
-	slog.InfoContext(ctx, "StreamEcho method called")
+	slog.InfoContext(ctx, "Stream Echo method called, baggage kv"+fmt.Sprintf("BaggageKey=%s", baggageValue))
 
-	for i := int32(0); i < req.Count; i++ {
+	for i := range req.Count {
 		resp := &api.StreamResponse{
 			Message:      fmt.Sprintf("Stream %s", req.Message),
 			Index:        i,

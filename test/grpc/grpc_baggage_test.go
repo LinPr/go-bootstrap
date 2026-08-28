@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -61,7 +62,7 @@ func TestGrpcBaggageInterceptor(t *testing.T) {
 	client := api.NewTestServiceClient(conn)
 
 	t.Run("UnaryCallWithBaggage", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		md := metadata.Pairs("BaggageKey", "unary-test-value")
 		ctx = metadata.NewOutgoingContext(ctx, md)
 
@@ -80,7 +81,7 @@ func TestGrpcBaggageInterceptor(t *testing.T) {
 	})
 
 	t.Run("StreamCallWithBaggage", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		md := metadata.Pairs("BaggageKey", "stream-test-value")
 		ctx = metadata.NewOutgoingContext(ctx, md)
 
@@ -94,7 +95,7 @@ func TestGrpcBaggageInterceptor(t *testing.T) {
 		receivedCount := 0
 		for {
 			resp, err := stream.Recv()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
@@ -114,7 +115,7 @@ func TestGrpcBaggageInterceptor(t *testing.T) {
 		}
 	})
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	if err := otel.ShutdownOtelProvider(shutdownCtx); err != nil {
 		t.Logf("warning: failed to shutdown provider: %v", err)
