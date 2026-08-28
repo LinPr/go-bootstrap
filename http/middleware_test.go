@@ -2,7 +2,6 @@ package http
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -84,7 +83,7 @@ func TestClientMiddlewares(t *testing.T) {
 	t.Run("debug log only", func(t *testing.T) {
 		client := NewHttpClient(WithClientDebugLog())
 
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/test", bytes.NewBufferString("client request"))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/test", bytes.NewBufferString("client request"))
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
 		}
@@ -110,7 +109,7 @@ func TestClientMiddlewares(t *testing.T) {
 	t.Run("otel and debug log", func(t *testing.T) {
 		client := NewHttpClient(WithOtelHttpTransport(nil), WithClientDebugLog())
 
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/otel", bytes.NewBufferString("otel request"))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/otel", bytes.NewBufferString("otel request"))
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
 		}

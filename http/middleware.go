@@ -2,10 +2,12 @@ package http
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -40,12 +42,12 @@ func buildCurlCommand(r *http.Request, body []byte) string {
 
 	for key, values := range r.Header {
 		for _, value := range values {
-			curl.WriteString(fmt.Sprintf(" -H '%s: %s'", key, value))
+			fmt.Fprintf(&curl, " -H '%s: %s'", key, value)
 		}
 	}
 
 	if len(body) > 0 {
-		curl.WriteString(fmt.Sprintf(" -d '%s'", string(body)))
+		fmt.Fprintf(&curl, " -d '%s'", string(body))
 	}
 
 	curl.WriteString(" '")
@@ -81,8 +83,8 @@ func (c *HandlerChain) Use(middlewares ...Middleware) *HandlerChain {
 // Build builds the final handler by applying all middlewares
 func (c *HandlerChain) Build() http.Handler {
 	handler := c.handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		handler = c.middlewares[i](handler)
+	for _, mw := range slices.Backward(c.middlewares) {
+		handler = mw(handler)
 	}
 	return handler
 }
@@ -188,10 +190,7 @@ func WithOtelHttpTransport(base http.RoundTripper) ClientOption {
 // WithClientDebugLog enables debug logging for HTTP client requests and responses
 func WithClientDebugLog() ClientOption {
 	return func(c *http.Client) {
-		if c.Transport == nil {
-			c.Transport = http.DefaultTransport
-		}
-		c.Transport = &loggingRoundTripper{next: c.Transport}
+		c.Transport = &loggingRoundTripper{next: cmp.Or(c.Transport, http.DefaultTransport)}
 	}
 }
 
