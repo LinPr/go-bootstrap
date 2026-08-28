@@ -69,7 +69,7 @@ func TestLoggingInterceptors(t *testing.T) {
 	client := healthpb.NewHealthClient(conn)
 
 	t.Run("unary", func(t *testing.T) {
-		resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
+		resp, err := client.Check(t.Context(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("health check failed: %v", err)
 		}
@@ -80,7 +80,7 @@ func TestLoggingInterceptors(t *testing.T) {
 	})
 
 	t.Run("stream", func(t *testing.T) {
-		stream, err := client.Watch(context.Background(), &healthpb.HealthCheckRequest{Service: "test.Service"})
+		stream, err := client.Watch(t.Context(), &healthpb.HealthCheckRequest{Service: "test.Service"})
 		if err != nil {
 			t.Fatalf("watch failed: %v", err)
 		}

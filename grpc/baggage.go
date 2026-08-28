@@ -3,6 +3,8 @@ package grpc
 import (
 	"context"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/baggage"
@@ -29,11 +31,7 @@ func (m MetadataCarrier) Set(key, value string) {
 }
 
 func (m MetadataCarrier) Keys() []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
+	return slices.Collect(maps.Keys(m))
 }
 
 func Inject(ctx context.Context, propagators propagation.TextMapPropagator) context.Context {
