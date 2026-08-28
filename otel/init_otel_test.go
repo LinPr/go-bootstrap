@@ -76,7 +76,7 @@ func TestOtelLogger(t *testing.T) {
 
 			runLoggerTest(t, tt.loggerType, provider)
 
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 			if err := ShutdownOtelProvider(shutdownCtx); err != nil {
 				t.Fatalf("failed to shutdown provider: %v", err)
@@ -122,7 +122,7 @@ func runLoggerTest(t *testing.T, loggerType LoggerType, provider *OtelProviders)
 	t.Helper()
 
 	tracer := otel.Tracer("logger-test-tracer")
-	rootCtx, rootSpan := tracer.Start(context.Background(), "logger-test-root")
+	rootCtx, rootSpan := tracer.Start(t.Context(), "logger-test-root")
 	defer rootSpan.End()
 
 	emitLogger(t, loggerType, provider, rootCtx, "root")

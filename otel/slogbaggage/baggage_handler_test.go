@@ -2,7 +2,6 @@ package slogbaggage
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"log/slog"
 	"testing"
@@ -29,13 +28,13 @@ func TestBaggageHandler(t *testing.T) {
 		t.Fatalf("failed to create baggage: %v", err)
 	}
 
-	ctx := baggage.ContextWithBaggage(context.Background(), bag)
+	ctx := baggage.ContextWithBaggage(t.Context(), bag)
 
 	slog.InfoContext(ctx, "test message with baggage")
 
 	t.Logf("Log output:\n%s", buf.String())
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("failed to unmarshal log output: %v", err)
 	}

@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -411,32 +412,28 @@ func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
 
 // Shutdown closes all providers.
 func (p *OtelProviders) Shutdown(ctx context.Context) error {
-	var errors []error
+	var errs []error
 
 	if p.logProvider != nil {
 		_ = p.logProvider.ForceFlush(ctx)
 		if err := p.logProvider.Shutdown(ctx); err != nil {
-			errors = append(errors, fmt.Errorf("log provider shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("log provider shutdown: %w", err))
 		}
 	}
 
 	if p.traceProvider != nil {
 		_ = p.traceProvider.ForceFlush(ctx)
 		if err := p.traceProvider.Shutdown(ctx); err != nil {
-			errors = append(errors, fmt.Errorf("trace provider shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("trace provider shutdown: %w", err))
 		}
 	}
 
 	if p.metricProvider != nil {
 		_ = p.metricProvider.ForceFlush(ctx)
 		if err := p.metricProvider.Shutdown(ctx); err != nil {
-			errors = append(errors, fmt.Errorf("metric provider shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("metric provider shutdown: %w", err))
 		}
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("shutdown errors: %v", errors)
-	}
-
-	return nil
+	return errors.Join(errs...)
 }

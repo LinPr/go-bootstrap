@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -43,10 +44,7 @@ func (l otelSeverityLogger) Enabled(ctx context.Context, param otellog.EnabledPa
 
 func parseLogLevel(level string) (otellog.Severity, zapcore.Level, logrus.Level, error) {
 	// Normalize the level string to lowercase and trim whitespace for comparison.
-	normalized := strings.ToLower(strings.TrimSpace(level))
-	if normalized == "" {
-		normalized = "info"
-	}
+	normalized := cmp.Or(strings.ToLower(strings.TrimSpace(level)), "info")
 
 	switch normalized {
 	case "debug":
