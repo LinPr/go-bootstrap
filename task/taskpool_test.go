@@ -10,13 +10,12 @@ func TestTaskPool_Run_Int(t *testing.T) {
 	pool := NewTaskPool[int](3)
 
 	for i := 1; i <= 5; i++ {
-		v := i
 		pool.Submit(func(ctx context.Context) int {
-			return v * 2
+			return i * 2
 		})
 	}
 
-	results := pool.Run(context.Background())
+	results := pool.Run(t.Context())
 	if len(results) != 5 {
 		t.Fatalf("expected 5 results, got %d", len(results))
 	}
@@ -45,7 +44,7 @@ func TestTaskPool_Run_ResultWithError(t *testing.T) {
 		return ResultWithErr{Err: expectedErr}
 	})
 
-	results := pool.Run(context.Background())
+	results := pool.Run(t.Context())
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}

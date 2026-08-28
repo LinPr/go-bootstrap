@@ -5,24 +5,24 @@ import (
 	"sync"
 )
 
-// TaskPool collects tasks and executes them concurrently using a fixed-size worker pool.
-type TaskPool[T any] struct {
+// taskPool collects tasks and executes them concurrently using a fixed-size worker pool.
+type taskPool[T any] struct {
 	workers int
 	tasks   []func(context.Context) T
 	mu      *sync.Mutex
 }
 
-// NewTaskPool creates a TaskPool with the given number of worker goroutines.
+// NewTaskPool creates a taskPool with the given number of worker goroutines.
 // workers is clamped to 1 if <= 0.
-func NewTaskPool[T any](workers int) *TaskPool[T] {
+func NewTaskPool[T any](workers int) *taskPool[T] {
 	if workers <= 0 {
 		workers = 1
 	}
-	return &TaskPool[T]{workers: workers, mu: &sync.Mutex{}}
+	return &taskPool[T]{workers: workers, mu: new(sync.Mutex)}
 }
 
 // Submit adds a task to the pool's task list.
-func (p *TaskPool[T]) Submit(fn func(context.Context) T) {
+func (p *taskPool[T]) Submit(fn func(context.Context) T) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.tasks = append(p.tasks, fn)
@@ -30,7 +30,7 @@ func (p *TaskPool[T]) Submit(fn func(context.Context) T) {
 
 // Run starts the worker goroutines, feeds all submitted tasks into the job queue,
 // waits for completion, and returns results in submission order.
-func (p *TaskPool[T]) Run(ctx context.Context) []T {
+func (p *taskPool[T]) Run(ctx context.Context) []T {
 
 	results := make([]T, len(p.tasks))
 	if len(p.tasks) == 0 {
@@ -52,7 +52,7 @@ func (p *TaskPool[T]) Run(ctx context.Context) []T {
 	// Start the configured number of workers.
 
 	var wg sync.WaitGroup
-	for i := 0; i < p.workers; i++ {
+	for range p.workers {
 		wg.Go(func() {
 			for {
 				select {
