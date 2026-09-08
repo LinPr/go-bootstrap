@@ -8,6 +8,48 @@ import (
 	"github.com/LinPr/go-bootstrap/otel/slogbaggage"
 )
 
+// func NewTestOtelConfig() *otel.Config {
+// 	return &otel.Config{
+// 		ServiceName:    "go-bootstrap",
+// 		ServiceVersion: "1.0.0",
+// 		Log: otel.LogConfig{
+// 			Enable:     true,
+// 			Exporter:   otel.ExporterTypeHTTP,
+// 			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+// 			Level:      "info",
+// 			Headers: map[string]string{
+// 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+// 				"stream-name":   "go-bootstrap",
+// 			},
+// 			Logger: otel.LoggerTypeSlog,
+// 			Pretty: true,
+// 		},
+// 		Trace: otel.TraceConfig{
+// 			Enable:     true,
+// 			Exporter:   otel.ExporterTypeHTTP,
+// 			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
+// 			// RemoteAddr: "http://10.86.11.69:9428/insert/opentelemetry/v1/traces",
+// 			Headers: map[string]string{
+// 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+// 				"stream-name":   "go-bootstrap",
+// 			},
+// 			Pretty:        false,
+// 			SamplingRatio: 1.0,
+// 		},
+// 		Metric: otel.MetricConfig{
+// 			Enable:     true,
+// 			Exporter:   otel.ExporterTypeHTTP,
+// 			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
+// 			Headers: map[string]string{
+// 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
+// 				"stream-name":   "go-bootstrap",
+// 			},
+// 			Pretty:          false,
+// 			IntervalSeconds: 1,
+// 		},
+// 	}
+// }
+
 func NewTestOtelConfig() *otel.Config {
 	return &otel.Config{
 		ServiceName:    "go-bootstrap",
@@ -15,19 +57,20 @@ func NewTestOtelConfig() *otel.Config {
 		Log: otel.LogConfig{
 			Enable:     true,
 			Exporter:   otel.ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
+			RemoteAddr: "http://10.86.11.64:4318/v1/logs",
 			Level:      "info",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "go-bootstrap",
 			},
-			Logger:             otel.LoggerTypeSlog,
-			Pretty:             true,
+			Logger: otel.LoggerTypeSlog,
+			Pretty: true,
 		},
 		Trace: otel.TraceConfig{
 			Enable:     true,
 			Exporter:   otel.ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
+			RemoteAddr: "http://10.86.11.64:4318/v1/traces",
+			// RemoteAddr: "http://10.86.11.69:9428/insert/opentelemetry/v1/traces",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "go-bootstrap",
@@ -38,13 +81,14 @@ func NewTestOtelConfig() *otel.Config {
 		Metric: otel.MetricConfig{
 			Enable:     true,
 			Exporter:   otel.ExporterTypeHTTP,
-			RemoteAddr: "http://10.86.11.34:5318/v1/metrics",
+			RemoteAddr: "http://10.86.11.64:4318/v1/metrics",
 			Headers: map[string]string{
 				"Authorization": "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM=",
 				"stream-name":   "go-bootstrap",
 			},
-			Pretty:          false,
-			IntervalSeconds: 1,
+			Pretty:               false,
+			IntervalSeconds:      1,
+			EnableRuntimeMetrics: true,
 		},
 	}
 }
