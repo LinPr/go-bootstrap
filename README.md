@@ -24,6 +24,8 @@ go get github.com/LinPr/go-bootstrap/<module>
 
 This is a Go workspace (`go.work`). To work on all modules together:
 
+
+
 ```bash
 go work sync
 go test ./...

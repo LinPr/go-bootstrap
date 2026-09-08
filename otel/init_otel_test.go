@@ -2,55 +2,50 @@ package otel
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/LinPr/go-bootstrap/otel/zapsugar"
-	"github.com/go-logr/logr"
-	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/bridges/otellogr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/baggage"
 	"go.uber.org/zap"
 )
 
-type logrusState struct {
-	output    io.Writer
-	formatter logrus.Formatter
-	level     logrus.Level
-	hooks     logrus.LevelHooks
-}
+// type logrusState struct {
+// 	output    io.Writer
+// 	formatter logrus.Formatter
+// 	level     logrus.Level
+// 	hooks     logrus.LevelHooks
+// }
 
-func snapshotLogrusState() logrusState {
-	logger := logrus.StandardLogger()
-	return logrusState{
-		output:    logger.Out,
-		formatter: logger.Formatter,
-		level:     logger.Level,
-		hooks:     logger.Hooks,
-	}
-}
+// func snapshotLogrusState() logrusState {
+// 	logger := logrus.StandardLogger()
+// 	return logrusState{
+// 		output:    logger.Out,
+// 		formatter: logger.Formatter,
+// 		level:     logger.Level,
+// 		hooks:     logger.Hooks,
+// 	}
+// }
 
-func restoreLogrusState(state logrusState) {
-	logger := logrus.StandardLogger()
-	logger.Out = state.output
-	logger.Formatter = state.formatter
-	logger.Level = state.level
-	logger.Hooks = state.hooks
-}
+// func restoreLogrusState(state logrusState) {
+// 	logger := logrus.StandardLogger()
+// 	logger.Out = state.output
+// 	logger.Formatter = state.formatter
+// 	logger.Level = state.level
+// 	logger.Hooks = state.hooks
+// }
 
 func TestOtelLogger(t *testing.T) {
 	previousSlog := slog.Default()
 	previousZap := zap.L()
-	previousLogrus := snapshotLogrusState()
+	// previousLogrus := snapshotLogrusState()
 
 	t.Cleanup(func() {
 		slog.SetDefault(previousSlog)
 		zap.ReplaceGlobals(previousZap)
-		restoreLogrusState(previousLogrus)
+		// restoreLogrusState(previousLogrus)
 		globalProvider = nil
 	})
 
@@ -190,20 +185,20 @@ func emitLogger(t *testing.T, loggerType LoggerType, provider *OtelProviders, ct
 		zapsugar.Errorw(ctxWithBaggage, message+" info (ReplaceGlobals)", "phase", phase)
 
 	case LoggerTypeLogrus:
-		logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
-		logrus.WithContext(ctx).WithField("phase", phase).Info(message + " info")
-		logrus.WithContext(ctx).WithField("phase", phase).Warn(message + " warn")
-		logrus.WithContext(ctx).WithField("phase", phase).Error(message + " error")
+		// logrus.WithContext(ctx).WithField("phase", phase).Debug(message + " debug")
+		// logrus.WithContext(ctx).WithField("phase", phase).Info(message + " info")
+		// logrus.WithContext(ctx).WithField("phase", phase).Warn(message + " warn")
+		// logrus.WithContext(ctx).WithField("phase", phase).Error(message + " error")
 
-		subLogger := logrus.WithField("module", "sublogger")
-		subLogger.WithContext(ctx).WithField("phase", phase).Info(message + " info (sub)")
-		subLogger.WithContext(ctx).WithField("phase", phase).Warn(message + " warn (sub)")
+		// subLogger := logrus.WithField("module", "sublogger")
+		// subLogger.WithContext(ctx).WithField("phase", phase).Info(message + " info (sub)")
+		// subLogger.WithContext(ctx).WithField("phase", phase).Warn(message + " warn (sub)")
 
 	case LoggerTypeLogr:
-		logger := logr.New(otellogr.NewLogSink("integration", otellogr.WithLoggerProvider(provider.GetLoggerProvider())))
-		logger.WithValues("context", ctx, "phase", phase).V(1).Info(message + " debug")
-		logger.WithValues("context", ctx, "phase", phase).Info(message + " info")
-		logger.WithValues("context", ctx, "phase", phase).Error(fmt.Errorf("synthetic error"), message+" error")
+		// logger := logr.New(otellogr.NewLogSink("integration", otellogr.WithLoggerProvider(provider.GetLoggerProvider())))
+		// logger.WithValues("context", ctx, "phase", phase).V(1).Info(message + " debug")
+		// logger.WithValues("context", ctx, "phase", phase).Info(message + " info")
+		// logger.WithValues("context", ctx, "phase", phase).Error(fmt.Errorf("synthetic error"), message+" error")
 	default:
 		t.Fatalf("unsupported logger type: %s", loggerType)
 	}

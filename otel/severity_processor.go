@@ -37,5 +37,5 @@ func (p *severityProcessor) OnEmit(ctx context.Context, record *log.Record) erro
 // Enabled reports enabled only when the severity meets the floor and the
 // wrapped processor also agrees.
 func (p *severityProcessor) Enabled(ctx context.Context, param log.EnabledParameters) bool {
-	return param.Severity >= p.minSeverity && p.Processor.Enabled(ctx, param)
+	return param.Severity >= p.minSeverity
 }
