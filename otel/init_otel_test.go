@@ -229,7 +229,8 @@ func TestOtelLoggerRotation(t *testing.T) {
 		globalProvider = nil
 	})
 
-	tmpDir := t.TempDir()
+	// tmpDir := t.TempDir()
+	tmpDir := "./log-rotate/"
 	logFile := filepath.Join(tmpDir, "rotation-test.log")
 
 	config := &Config{
@@ -240,15 +241,17 @@ func TestOtelLoggerRotation(t *testing.T) {
 			Exporter: ExporterTypeFile,
 			Logger:   LoggerTypeSlog,
 			Level:    "debug",
-			Pretty:   true,
+			Pretty:   false,
+			Rotate: Rotate{
+				Filename:   logFile,
+				MaxMB:      1, // 1 MB — small enough to trigger rotation quickly
+				MaxBackups: 3,
+				MaxDay:     1,
+				LocalTime:  true,
+				Compress:   false,
+			},
 		},
 	}
-	config.Log.Rotate.Filename = logFile
-	config.Log.Rotate.MaxMB = 1 // 1 MB — small enough to trigger rotation quickly
-	config.Log.Rotate.MaxBackups = 3
-	config.Log.Rotate.MaxDay = 1
-	config.Log.Rotate.LocalTime = true
-	config.Log.Rotate.Compress = false
 
 	if _, err := NewOtelProviders(config); err != nil {
 		t.Fatalf("failed to initialize provider: %v", err)
