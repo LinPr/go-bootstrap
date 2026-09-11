@@ -25,7 +25,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
@@ -36,6 +35,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // OtelProviders holds the OpenTelemetry providers.
@@ -183,6 +183,8 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 
 		// Wrap the otelslog handler so struct/map/slice attributes are JSON
 		// encoded here, before the bridge flattens them via fmt %+v.
+		// Note: when serializing structs, unexported fields are not serialized;
+		// enable this behavior as appropriate.
 		if logConfig.Pretty {
 			handler = newjsonHandler(handler, logConfig.Pretty)
 		}
@@ -240,11 +242,26 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 // createLogExporter creates a log exporter.
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
+	case ExporterTypeFile:
+		opts := []stdoutlog.Option{
+			stdoutlog.WithWriter(
+				&lumberjack.Logger{
+					Filename:   logConfig.Rotate.Filename,
+					MaxSize:    logConfig.Rotate.MaxSize,
+					MaxAge:     logConfig.Rotate.MaxAge,
+					MaxBackups: logConfig.Rotate.MaxBackups,
+					LocalTime:  logConfig.Rotate.LocalTime,
+					Compress:   logConfig.Rotate.Compress,
+				}),
+		}
+		if logConfig.Pretty {
+			opts = append(opts, stdoutlog.WithPrettyPrint())
+		}
+		return stdoutlog.New(opts...)
+
 	case ExporterTypeStdout:
 		if logConfig.Pretty {
-			return stdoutlog.New(
-				stdoutlog.WithPrettyPrint(),
-			)
+			return stdoutlog.New(stdoutlog.WithPrettyPrint())
 		}
 		return stdoutlog.New()
 
