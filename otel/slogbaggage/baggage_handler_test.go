@@ -2,6 +2,7 @@ package slogbaggage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"testing"
@@ -15,7 +16,7 @@ func TestBaggageHandler(t *testing.T) {
 		Level: slog.LevelInfo,
 	})
 
-	logger := slog.New(NewBaggageHandler(jsonHandler, WithBaggageMembers("user.id", "request.id")))
+	logger := slog.New(NewBaggageHandler(jsonHandler, WithBaggageMembers("user.id", "request.id", "session.id")))
 
 	slog.SetDefault(logger)
 
@@ -28,7 +29,7 @@ func TestBaggageHandler(t *testing.T) {
 		t.Fatalf("failed to create baggage: %v", err)
 	}
 
-	ctx := baggage.ContextWithBaggage(t.Context(), bag)
+	ctx := baggage.ContextWithBaggage(context.Background(), bag)
 
 	slog.InfoContext(ctx, "test message with baggage")
 

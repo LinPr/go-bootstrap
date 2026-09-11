@@ -32,6 +32,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // OtelProviders holds the OpenTelemetry providers.
@@ -209,6 +210,23 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 // createLogExporter creates a log exporter.
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
+	case ExporterTypeFile:
+		opts := []stdoutlog.Option{
+			stdoutlog.WithWriter(
+				&lumberjack.Logger{
+					Filename:   logConfig.Rotate.Filename,
+					MaxSize:    logConfig.Rotate.MaxMB,
+					MaxAge:     logConfig.Rotate.MaxDay,
+					MaxBackups: logConfig.Rotate.MaxBackups,
+					LocalTime:  logConfig.Rotate.LocalTime,
+					Compress:   logConfig.Rotate.Compress,
+				}),
+		}
+		if logConfig.Pretty {
+			opts = append(opts, stdoutlog.WithPrettyPrint())
+		}
+		return stdoutlog.New(opts...)
+
 	case ExporterTypeStdout:
 		if logConfig.Pretty {
 			return stdoutlog.New(
