@@ -244,9 +244,9 @@ func TestOtelLoggerRotation(t *testing.T) {
 		},
 	}
 	config.Log.Rotate.Filename = logFile
-	config.Log.Rotate.MaxSize = 1 // 1 MB — small enough to trigger rotation quickly
+	config.Log.Rotate.MaxMB = 1 // 1 MB — small enough to trigger rotation quickly
 	config.Log.Rotate.MaxBackups = 3
-	config.Log.Rotate.MaxAge = 1
+	config.Log.Rotate.MaxDay = 1
 	config.Log.Rotate.LocalTime = true
 	config.Log.Rotate.Compress = false
 
@@ -258,7 +258,7 @@ func TestOtelLoggerRotation(t *testing.T) {
 	ctx, span := tracer.Start(t.Context(), "rotation-test-root")
 	defer span.End()
 
-	// Emit enough logs to exceed MaxSize (1 MB) and trigger at least one rotation.
+	// Emit enough logs to exceed MaxMB (1 MB) and trigger at least one rotation.
 	payload := strings.Repeat("x", 300)
 	for i := 0; i < 5000; i++ {
 		slog.InfoContext(ctx, "rotation test log message", "iteration", i, "payload", payload)

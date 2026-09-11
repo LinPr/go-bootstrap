@@ -247,8 +247,8 @@ func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, e
 			stdoutlog.WithWriter(
 				&lumberjack.Logger{
 					Filename:   logConfig.Rotate.Filename,
-					MaxSize:    logConfig.Rotate.MaxSize,
-					MaxAge:     logConfig.Rotate.MaxAge,
+					MaxSize:    logConfig.Rotate.MaxMB,
+					MaxAge:     logConfig.Rotate.MaxDay,
 					MaxBackups: logConfig.Rotate.MaxBackups,
 					LocalTime:  logConfig.Rotate.LocalTime,
 					Compress:   logConfig.Rotate.Compress,
