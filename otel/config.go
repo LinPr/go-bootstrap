@@ -61,13 +61,13 @@ type LogConfig struct {
 		Filename string `json:"filename" yaml:"filename"`
 		// MaxMB is the maximum size in megabytes of the log file before it gets
 		// rotated. It defaults to 100 megabytes.
-		MaxMB int `json:"maxsize" yaml:"maxsize"`
+		MaxMB int `json:"maxmb" yaml:"maxmb"`
 		// MaxDay is the maximum number of days to retain old log files based on the
 		// timestamp encoded in their filename.  Note that a day is defined as 24
 		// hours and may not exactly correspond to calendar days due to daylight
 		// savings, leap seconds, etc. The default is not to remove old log files
 		// based on age.
-		MaxDay int `json:"maxage" yaml:"maxage"`
+		MaxDay int `json:"maxday" yaml:"maxday"`
 		// MaxBackups is the maximum number of old log files to retain.  The default
 		// is to retain all old log files (though MaxDay may still cause them to get
 		// deleted.)
