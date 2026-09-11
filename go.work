@@ -1,0 +1,11 @@
+go 1.27.1
+
+use (
+	./gin
+	./grpc
+	./http
+	./otel
+	./resty
+	./task
+	./test
+)
