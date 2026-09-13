@@ -96,11 +96,11 @@ func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*res
 	return resource.New(
 		context.Background(),
 		resource.WithFromEnv(), // Read environment variables first.
-		resource.WithHost(),    // Add host information.
 		resource.WithAttributes( // Set service information last so it wins.
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
+		// resource.WithHost(),
 		// resource.WithProcess(),
 		// resource.WithTelemetrySDK(),
 
