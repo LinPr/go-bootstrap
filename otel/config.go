@@ -54,32 +54,36 @@ type LogConfig struct {
 	// Pretty enables pretty output for stdout and pretty attribute formatting for HTTP and gRPC.
 	Pretty bool
 	// Rotate is the log rotation configuration for file log.
-	Rotate struct {
-		// Filename is the file to write logs to.  Backup log files will be retained
-		// in the same directory.  It uses <processname>-lumberjack.log in
-		// os.TempDir() if empty.
-		Filename string `json:"filename" yaml:"filename"`
-		// MaxMB is the maximum size in megabytes of the log file before it gets
-		// rotated. It defaults to 100 megabytes.
-		MaxMB int `json:"maxmb" yaml:"maxmb"`
-		// MaxDay is the maximum number of days to retain old log files based on the
-		// timestamp encoded in their filename.  Note that a day is defined as 24
-		// hours and may not exactly correspond to calendar days due to daylight
-		// savings, leap seconds, etc. The default is not to remove old log files
-		// based on age.
-		MaxDay int `json:"maxday" yaml:"maxday"`
-		// MaxBackups is the maximum number of old log files to retain.  The default
-		// is to retain all old log files (though MaxDay may still cause them to get
-		// deleted.)
-		MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
-		// LocalTime determines if the time used for formatting the timestamps in
-		// backup files is the computer's local time.  The default is to use UTC
-		// time.
-		LocalTime bool `json:"localtime" yaml:"localtime"`
-		// Compress determines if the rotated log files should be compressed
-		// using gzip. The default is not to perform compression.
-		Compress bool `json:"compress" yaml:"compress"`
-	}
+	Rotate Rotate
+	// AttributeCountLimit is the maximum number of attributes per log record.
+	AttributeCountLimit int
+}
+
+type Rotate struct {
+	// Filename is the file to write logs to.  Backup log files will be retained
+	// in the same directory.  It uses <processname>-lumberjack.log in
+	// os.TempDir() if empty.
+	Filename string `json:"filename" yaml:"filename"`
+	// MaxMB is the maximum size in megabytes of the log file before it gets
+	// rotated. It defaults to 100 megabytes.
+	MaxMB int `json:"maxmb" yaml:"maxmb"`
+	// MaxDay is the maximum number of days to retain old log files based on the
+	// timestamp encoded in their filename.  Note that a day is defined as 24
+	// hours and may not exactly correspond to calendar days due to daylight
+	// savings, leap seconds, etc. The default is not to remove old log files
+	// based on age.
+	MaxDay int `json:"maxday" yaml:"maxday"`
+	// MaxBackups is the maximum number of old log files to retain.  The default
+	// is to retain all old log files (though MaxDay may still cause them to get
+	// deleted.)
+	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
+	// LocalTime determines if the time used for formatting the timestamps in
+	// backup files is the computer's local time.  The default is to use UTC
+	// time.
+	LocalTime bool `json:"localtime" yaml:"localtime"`
+	// Compress determines if the rotated log files should be compressed
+	// using gzip. The default is not to perform compression.
+	Compress bool `json:"compress" yaml:"compress"`
 }
 
 // TraceConfig holds trace settings.
@@ -114,6 +118,8 @@ type MetricConfig struct {
 	IntervalSeconds int
 	// EnableRuntimeMetrics toggles Go runtime metrics.
 	EnableRuntimeMetrics bool
+	// CardinalityLimit sets the maximum number of unique label combinations for each metric instrument.
+	CardinalityLimit int
 }
 
 // DefaultConfig returns the default configuration.
@@ -122,24 +128,40 @@ func DefaultConfig() *Config {
 		ServiceName:    "go-bootstrap",
 		ServiceVersion: "0.0.0",
 		Log: LogConfig{
-			Enable:   true,
-			Exporter: ExporterTypeStdout,
-			Logger:   LoggerTypeSlog,
-			Level:    "info",
-			Pretty:   true,
+			Enable:     true,
+			Exporter:   ExporterTypeStdout,
+			Logger:     LoggerTypeSlog,
+			Level:      "info",
+			RemoteAddr: "",
+			Headers:    map[string]string{},
+			Pretty:     true,
+			Rotate: Rotate{
+				Filename:   "./log/go-bootstrap.json",
+				MaxMB:      1024,
+				MaxDay:     1,
+				MaxBackups: 7,
+				LocalTime:  true,
+				Compress:   true,
+			},
+			AttributeCountLimit: 128,
 		},
 		Trace: TraceConfig{
 			Enable:        true,
 			Exporter:      ExporterTypeStdout,
+			RemoteAddr:    "",
+			Headers:       map[string]string{},
 			Pretty:        true,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
 			Enable:               true,
 			Exporter:             ExporterTypeStdout,
+			RemoteAddr:           "",
+			Headers:              map[string]string{},
 			Pretty:               true,
-			IntervalSeconds:      10,
+			IntervalSeconds:      30,
 			EnableRuntimeMetrics: true,
+			CardinalityLimit:     2000,
 		},
 	}
 }
