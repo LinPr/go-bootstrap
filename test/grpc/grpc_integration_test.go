@@ -93,17 +93,17 @@ type integrationMeters struct {
 func newIntegrationMeters(t *testing.T) integrationMeters {
 	t.Helper()
 	meter := otelgo.Meter("go-bootstrap-grpc-integration")
-	prefix := "go_bootstrap_grpc_integration_"
+	prefix := "go.bootstrap.grpc.integration."
 
-	requests, err := meter.Int64Counter(prefix + "request_counter")
+	requests, err := meter.Int64Counter(prefix + "request.counter")
 	if err != nil {
 		t.Fatalf("failed to create request counter: %v", err)
 	}
-	latency, err := meter.Float64Histogram(prefix + "latency_ms")
+	latency, err := meter.Float64Histogram(prefix + "latency.ms")
 	if err != nil {
 		t.Fatalf("failed to create latency histogram: %v", err)
 	}
-	active, err := meter.Int64UpDownCounter(prefix + "active_requests")
+	active, err := meter.Int64UpDownCounter(prefix + "active.requests")
 	if err != nil {
 		t.Fatalf("failed to create active counter: %v", err)
 	}

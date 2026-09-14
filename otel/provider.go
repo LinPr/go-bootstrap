@@ -11,17 +11,7 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
@@ -32,7 +22,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // OtelProviders holds the OpenTelemetry providers.
@@ -147,7 +136,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 			processor,
 		),
 		log.WithResource(res),
-		log.WithAttributeCountLimit(50),
+		log.WithAttributeCountLimit(logConfig.AttributeCountLimit),
 	)
 
 	global.SetLoggerProvider(p.logProvider)
@@ -207,55 +196,6 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 	return nil
 }
 
-// createLogExporter creates a log exporter.
-func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
-	switch logConfig.Exporter {
-	case ExporterTypeFile:
-		opts := []stdoutlog.Option{
-			stdoutlog.WithWriter(
-				&lumberjack.Logger{
-					Filename:   logConfig.Rotate.Filename,
-					MaxSize:    logConfig.Rotate.MaxMB,
-					MaxAge:     logConfig.Rotate.MaxDay,
-					MaxBackups: logConfig.Rotate.MaxBackups,
-					LocalTime:  logConfig.Rotate.LocalTime,
-					Compress:   logConfig.Rotate.Compress,
-				}),
-		}
-		if logConfig.Pretty {
-			opts = append(opts, stdoutlog.WithPrettyPrint())
-		}
-		return stdoutlog.New(opts...)
-
-	case ExporterTypeStdout:
-		if logConfig.Pretty {
-			return stdoutlog.New(
-				stdoutlog.WithPrettyPrint(),
-			)
-		}
-		return stdoutlog.New()
-
-	case ExporterTypeHTTP:
-		return otlploghttp.New(
-			context.Background(),
-			otlploghttp.WithEndpointURL(logConfig.RemoteAddr),
-			otlploghttp.WithHeaders(logConfig.Headers),
-			otlploghttp.WithInsecure(),
-		)
-
-	case ExporterTypeGRPC:
-		return otlploggrpc.New(
-			context.Background(),
-			otlploggrpc.WithEndpoint(logConfig.RemoteAddr),
-			otlploggrpc.WithInsecure(),
-			otlploggrpc.WithHeaders(logConfig.Headers),
-		)
-
-	default:
-		return nil, fmt.Errorf("unsupported log exporter type: %s", logConfig.Exporter)
-	}
-}
-
 // initTrace initializes the trace provider.
 func (p *OtelProviders) initTrace(traceConfig TraceConfig, res *resource.Resource) error {
 	if !traceConfig.Enable {
@@ -280,38 +220,6 @@ func (p *OtelProviders) initTrace(traceConfig TraceConfig, res *resource.Resourc
 	return nil
 }
 
-// createTraceExporter creates a trace exporter.
-func createTraceExporter(traceConfig TraceConfig) (trace.SpanExporter, error) {
-	switch traceConfig.Exporter {
-	case ExporterTypeStdout:
-		if traceConfig.Pretty {
-			return stdouttrace.New(
-				stdouttrace.WithPrettyPrint(),
-			)
-		}
-		return stdouttrace.New()
-
-	case ExporterTypeHTTP:
-		return otlptracehttp.New(
-			context.Background(),
-			otlptracehttp.WithEndpointURL(traceConfig.RemoteAddr),
-			otlptracehttp.WithInsecure(),
-			otlptracehttp.WithHeaders(traceConfig.Headers),
-		)
-
-	case ExporterTypeGRPC:
-		return otlptracegrpc.New(
-			context.Background(),
-			otlptracegrpc.WithEndpoint(traceConfig.RemoteAddr),
-			otlptracegrpc.WithInsecure(),
-			otlptracegrpc.WithHeaders(traceConfig.Headers),
-		)
-
-	default:
-		return nil, fmt.Errorf("unsupported trace exporter type: %s", traceConfig.Exporter)
-	}
-}
-
 // initMetric initializes the metric provider.
 func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Resource) error {
 	if !metricConfig.Enable {
@@ -330,7 +238,6 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 			metric.WithReader(promeExporter),
 			metric.WithResource(res),
 			metric.WithExemplarFilter(exemplar.TraceBasedFilter),
-			// metric.WithCardinalityLimit(2000),
 		)
 
 	} else {
@@ -347,6 +254,7 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 				),
 			),
 			metric.WithResource(res),
+			metric.WithCardinalityLimit(metricConfig.CardinalityLimit),
 			metric.WithExemplarFilter(exemplar.TraceBasedFilter),
 		)
 	}
@@ -365,36 +273,6 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 
 	slog.Info("metric provider initialized", "exporter", string(metricConfig.Exporter))
 	return nil
-}
-
-// createMetricExporter creates a metric exporter.
-func createMetricExporter(metricConfig MetricConfig) (metric.Exporter, error) {
-	switch metricConfig.Exporter {
-	case ExporterTypeStdout:
-		if metricConfig.Pretty {
-			return stdoutmetric.New(stdoutmetric.WithPrettyPrint())
-		}
-		return stdoutmetric.New()
-
-	case ExporterTypeHTTP:
-		return otlpmetrichttp.New(
-			context.Background(),
-			otlpmetrichttp.WithEndpointURL(metricConfig.RemoteAddr),
-			otlpmetrichttp.WithInsecure(),
-			otlpmetrichttp.WithHeaders(metricConfig.Headers),
-		)
-
-	case ExporterTypeGRPC:
-		return otlpmetricgrpc.New(
-			context.Background(),
-			otlpmetricgrpc.WithEndpoint(metricConfig.RemoteAddr),
-			otlpmetricgrpc.WithInsecure(),
-			otlpmetricgrpc.WithHeaders(metricConfig.Headers),
-		)
-
-	default:
-		return nil, fmt.Errorf("unsupported metric exporter type: %s", metricConfig.Exporter)
-	}
 }
 
 // Shutdown closes all providers.

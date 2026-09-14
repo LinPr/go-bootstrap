@@ -55,6 +55,8 @@ type LogConfig struct {
 	Pretty bool
 	// Rotate is the log rotation configuration for file log.
 	Rotate Rotate
+	// AttributeCountLimit is the maximum number of attributes per log record.
+	AttributeCountLimit int
 }
 
 // Rotate is the log rotation configuration for file log using lumberjack.
@@ -117,6 +119,8 @@ type MetricConfig struct {
 	IntervalSeconds int
 	// EnableRuntimeMetrics toggles Go runtime metrics.
 	EnableRuntimeMetrics bool
+	// CardinalityLimit sets the maximum number of unique label combinations for each metric instrument.
+	CardinalityLimit int
 }
 
 // DefaultConfig returns the default configuration.
@@ -125,24 +129,40 @@ func DefaultConfig() *Config {
 		ServiceName:    "go-bootstrap",
 		ServiceVersion: "0.0.0",
 		Log: LogConfig{
-			Enable:   true,
-			Exporter: ExporterTypeStdout,
-			Logger:   LoggerTypeSlog,
-			Level:    "info",
-			Pretty:   true,
+			Enable:     true,
+			Exporter:   ExporterTypeStdout,
+			Logger:     LoggerTypeSlog,
+			Level:      "info",
+			RemoteAddr: "",
+			Headers:    map[string]string{},
+			Pretty:     true,
+			Rotate: Rotate{
+				Filename:   "./log/go-bootstrap.json",
+				MaxMB:      1024,
+				MaxDay:     1,
+				MaxBackups: 7,
+				LocalTime:  true,
+				Compress:   true,
+			},
+			AttributeCountLimit: 128,
 		},
 		Trace: TraceConfig{
 			Enable:        true,
 			Exporter:      ExporterTypeStdout,
+			RemoteAddr:    "",
+			Headers:       map[string]string{},
 			Pretty:        true,
 			SamplingRatio: 1.0,
 		},
 		Metric: MetricConfig{
 			Enable:               true,
 			Exporter:             ExporterTypeStdout,
+			RemoteAddr:           "",
+			Headers:              map[string]string{},
 			Pretty:               true,
-			IntervalSeconds:      10,
+			IntervalSeconds:      30,
 			EnableRuntimeMetrics: true,
+			CardinalityLimit:     2000,
 		},
 	}
 }

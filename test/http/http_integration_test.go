@@ -22,12 +22,12 @@ func TestHttpOtelIntegration(t *testing.T) {
 	_ = config.SetupTestOtelProvider(t)
 
 	meter := otelgo.Meter("go-bootstrap-http-integration")
-	metricPrefix := "go_bootstrap_http_integration_"
-	requestCounter, err := meter.Int64Counter(metricPrefix + "request_counter")
+	metricPrefix := "go.bootstrap.http.integration."
+	requestCounter, err := meter.Int64Counter(metricPrefix + "request.counter")
 	if err != nil {
 		t.Fatalf("failed to create request counter: %v", err)
 	}
-	histogram, err := meter.Float64Histogram(metricPrefix + "latency_ms")
+	histogram, err := meter.Float64Histogram(metricPrefix + "latency.ms")
 	if err != nil {
 		t.Fatalf("failed to create latency histogram: %v", err)
 	}
