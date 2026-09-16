@@ -3,7 +3,9 @@ package otel
 import (
 	"context"
 	"fmt"
+	"os"
 
+	"github.com/LinPr/go-bootstrap/otel/otlplogfile"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -23,8 +25,12 @@ import (
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
 	case ExporterTypeFile:
-		opts := []stdoutlog.Option{
-			stdoutlog.WithWriter(
+		opts := []otlplogfile.Option{}
+		switch logConfig.Rotate.Filename {
+		case "", "stdout", "/dev/stdout":
+			opts = append(opts, otlplogfile.WithWriter(os.Stdout))
+		default:
+			opts = append(opts, otlplogfile.WithWriter(
 				&lumberjack.Logger{
 					Filename:   logConfig.Rotate.Filename,
 					MaxSize:    logConfig.Rotate.MaxMB,
@@ -32,12 +38,9 @@ func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, e
 					MaxBackups: logConfig.Rotate.MaxBackups,
 					LocalTime:  logConfig.Rotate.LocalTime,
 					Compress:   logConfig.Rotate.Compress,
-				}),
+				}))
 		}
-		if logConfig.Pretty {
-			opts = append(opts, stdoutlog.WithPrettyPrint())
-		}
-		return stdoutlog.New(opts...)
+		return otlplogfile.New(opts...)
 
 	case ExporterTypeStdout:
 		if logConfig.Pretty {

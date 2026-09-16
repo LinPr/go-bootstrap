@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	// "github.com/sirupsen/logrus"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.uber.org/zap/zapcore"
 )

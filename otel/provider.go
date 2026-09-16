@@ -3,6 +3,7 @@ package otel
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,6 +35,7 @@ type OtelProviders struct {
 
 // newOtelProviders creates a new OpenTelemetry provider set.
 func newOtelProviders(config *Config) (*OtelProviders, error) {
+
 	conf := DefaultConfig()
 	if config != nil {
 		// Top-level fields.
@@ -81,13 +83,17 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Metric.CardinalityLimit = cmp.Or(config.Metric.CardinalityLimit, conf.Metric.CardinalityLimit)
 	}
 
+	j, _ := json.Marshal(conf)
+
+	fmt.Println(string(j))
+
 	p := &OtelProviders{
 		logProvider:    nil,
 		traceProvider:  nil,
 		metricProvider: nil,
 	}
 
-	if err := p.initialize(config); err != nil {
+	if err := p.initialize(conf); err != nil {
 		return nil, err
 	}
 
@@ -133,7 +139,7 @@ func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*res
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
-		// resource.WithHost(),
+		// resource.WithHost(),  // not recommend, may cause high cardinality
 		// resource.WithProcess(),
 		// resource.WithTelemetrySDK(),
 
@@ -213,6 +219,8 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 
 		// Wrap the otelslog handler so struct/map/slice attributes are JSON
 		// encoded here, before the bridge flattens them via fmt %+v.
+		// Note: when serializing structs, unexported fields are not serialized;
+		// enable this behavior as appropriate.
 		if logConfig.Pretty {
 			handler = newjsonHandler(handler, logConfig.Pretty)
 		}
@@ -233,6 +241,32 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 		)
 		zap.ReplaceGlobals(logger)
 
+	case LoggerTypeLogrus:
+
+		// hook := otellogrus.NewHook(
+		// 	"global",
+		// 	otellogrus.WithLoggerProvider(p.logProvider),
+		// )
+		// logger := logrus.New()
+		// logger.AddHook(hook)
+		// logger.SetLevel(logrusLevel)
+
+		// // Set as the global logger.
+		// logrus.SetFormatter(logger.Formatter)
+		// logrus.SetOutput(logger.Out)
+		// logrus.SetLevel(logger.Level)
+		// logrus.AddHook(hook)
+
+	case LoggerTypeLogr:
+		// logSink := otellogr.NewLogSink(
+		// 	"global",
+		// 	otellogr.WithLoggerProvider(p.logProvider),
+		// )
+		// // logr instances are managed by the caller; this only creates an example.
+		// loggger := logr.New(logSink)
+		// // TODO:
+		// _ = loggger // Avoid unused warnings; applications can use this logger.
+		// // otel.SetLogger(loggger)
 	default:
 		return fmt.Errorf("unsupported logger type: %s", logConfig.Logger)
 	}
@@ -277,7 +311,6 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 		if err != nil {
 			return fmt.Errorf("failed to create prometheus exporter: %w", err)
 		}
-
 		meterProvider = metric.NewMeterProvider(
 			metric.WithReader(promeExporter),
 			metric.WithResource(res),
