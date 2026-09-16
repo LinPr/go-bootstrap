@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -37,8 +38,52 @@ type OtelProviders struct {
 
 // newOtelProviders creates a new OpenTelemetry provider set.
 func newOtelProviders(config *Config) (*OtelProviders, error) {
-	if config == nil {
-		config = DefaultConfig()
+
+	conf := DefaultConfig()
+	if config != nil {
+		// Top-level fields.
+		conf.ServiceName = cmp.Or(config.ServiceName, conf.ServiceName)
+		conf.ServiceVersion = cmp.Or(config.ServiceVersion, conf.ServiceVersion)
+
+		// Log config.
+		conf.Log.Enable = config.Log.Enable
+		conf.Log.Exporter = cmp.Or(config.Log.Exporter, conf.Log.Exporter)
+		conf.Log.Logger = cmp.Or(config.Log.Logger, conf.Log.Logger)
+		conf.Log.Level = cmp.Or(config.Log.Level, conf.Log.Level)
+		conf.Log.RemoteAddr = cmp.Or(config.Log.RemoteAddr, conf.Log.RemoteAddr)
+		if config.Log.Headers != nil {
+			conf.Log.Headers = config.Log.Headers
+		}
+		conf.Log.Pretty = config.Log.Pretty
+		conf.Log.AttributeCountLimit = cmp.Or(config.Log.AttributeCountLimit, conf.Log.AttributeCountLimit)
+		conf.Log.Rotate.Filename = cmp.Or(config.Log.Rotate.Filename, conf.Log.Rotate.Filename)
+		conf.Log.Rotate.MaxMB = cmp.Or(config.Log.Rotate.MaxMB, conf.Log.Rotate.MaxMB)
+		conf.Log.Rotate.MaxDay = cmp.Or(config.Log.Rotate.MaxDay, conf.Log.Rotate.MaxDay)
+		conf.Log.Rotate.MaxBackups = cmp.Or(config.Log.Rotate.MaxBackups, conf.Log.Rotate.MaxBackups)
+		conf.Log.Rotate.LocalTime = config.Log.Rotate.LocalTime
+		conf.Log.Rotate.Compress = config.Log.Rotate.Compress
+
+		// Trace config.
+		conf.Trace.Enable = config.Trace.Enable
+		conf.Trace.Exporter = cmp.Or(config.Trace.Exporter, conf.Trace.Exporter)
+		conf.Trace.RemoteAddr = cmp.Or(config.Trace.RemoteAddr, conf.Trace.RemoteAddr)
+		if config.Trace.Headers != nil {
+			conf.Trace.Headers = config.Trace.Headers
+		}
+		conf.Trace.Pretty = config.Trace.Pretty
+		conf.Trace.SamplingRatio = cmp.Or(config.Trace.SamplingRatio, conf.Trace.SamplingRatio)
+
+		// Metric config.
+		conf.Metric.Enable = config.Metric.Enable
+		conf.Metric.Exporter = cmp.Or(config.Metric.Exporter, conf.Metric.Exporter)
+		conf.Metric.RemoteAddr = cmp.Or(config.Metric.RemoteAddr, conf.Metric.RemoteAddr)
+		if config.Metric.Headers != nil {
+			conf.Metric.Headers = config.Metric.Headers
+		}
+		conf.Metric.Pretty = config.Metric.Pretty
+		conf.Metric.IntervalSeconds = cmp.Or(config.Metric.IntervalSeconds, conf.Metric.IntervalSeconds)
+		conf.Metric.EnableRuntimeMetrics = config.Metric.EnableRuntimeMetrics
+		conf.Metric.CardinalityLimit = cmp.Or(config.Metric.CardinalityLimit, conf.Metric.CardinalityLimit)
 	}
 
 	p := &OtelProviders{
@@ -47,7 +92,7 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		metricProvider: nil,
 	}
 
-	if err := p.initialize(config); err != nil {
+	if err := p.initialize(conf); err != nil {
 		return nil, err
 	}
 

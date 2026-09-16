@@ -34,31 +34,88 @@ func main() {
 
 ## Configuration
 
+`Config` is merged on top of `DefaultConfig()`: any zero-valued field in the
+passed `Config` falls back to the default, while non-zero fields override it.
+This lets you set only the fields you care about.
+
 ```go
 cfg := &bsotel.Config{
 	ServiceName:    "go-bootstrap",
 	ServiceVersion: "1.0.0",
 	Log: bsotel.LogConfig{
-		Enable:     true,
-		Exporter:   bsotel.ExporterTypeHTTP,
-		Logger:     bsotel.LoggerTypeSlog,
-		Level:      "info",
-		RemoteAddr: "http://localhost:4318/v1/logs",
+		Enable:               true,
+		Exporter:             bsotel.ExporterTypeHTTP,
+		Logger:               bsotel.LoggerTypeSlog,
+		Level:                "info",
+		RemoteAddr:           "http://localhost:4318/v1/logs",
+		Headers:              map[string]string{"X-Custom": "value"},
+		Pretty:               true,
+		AttributeCountLimit:  128,
+		Rotate: bsotel.Rotate{
+			Filename:   "./log/go-bootstrap.json",
+			MaxMB:      1024,
+			MaxDay:     1,
+			MaxBackups: 7,
+			LocalTime:  true,
+			Compress:   true,
+		},
 	},
 	Trace: bsotel.TraceConfig{
 		Enable:        true,
 		Exporter:      bsotel.ExporterTypeGRPC,
 		RemoteAddr:    "localhost:4317",
+		Headers:       map[string]string{"X-Custom": "value"},
+		Pretty:        true,
 		SamplingRatio: 1.0,
 	},
 	Metric: bsotel.MetricConfig{
 		Enable:               true,
 		Exporter:             bsotel.ExporterTypePrometheus,
-		EnableRuntimeMetrics: true,
+		RemoteAddr:           "localhost:4317",
+		Headers:              map[string]string{"X-Custom": "value"},
+		Pretty:               true,
 		IntervalSeconds:      10,
+		EnableRuntimeMetrics: true,
+		CardinalityLimit:     2000,
 	},
 }
 ```
+
+### Field reference
+
+| Section | Field | Type | Description |
+| --- | --- | --- | --- |
+| `Config` | `ServiceName` | `string` | Service name |
+| | `ServiceVersion` | `string` | Service version |
+| `LogConfig` | `Enable` | `bool` | Toggle logging |
+| | `Exporter` | `ExporterType` | `stdout` / `file` / `http` / `grpc` |
+| | `Logger` | `LoggerType` | `slog` / `zap` / `logrus` / `logr` |
+| | `Level` | `string` | `debug` / `info` / `warn` / `error` |
+| | `RemoteAddr` | `string` | HTTP URL or gRPC address |
+| | `Headers` | `map[string]string` | Request headers for HTTP/gRPC |
+| | `Pretty` | `bool` | Pretty-print stdout / JSON attributes |
+| | `AttributeCountLimit` | `int` | Max attributes per log record |
+| | `Rotate` | `Rotate` | File rotation (see below) |
+| `Rotate` | `Filename` | `string` | Log file path |
+| | `MaxMB` | `int` | Max file size in MB before rotation |
+| | `MaxDay` | `int` | Max days to retain old files |
+| | `MaxBackups` | `int` | Max number of old files to keep |
+| | `LocalTime` | `bool` | Use local time for backups |
+| | `Compress` | `bool` | Gzip rotated files |
+| `TraceConfig` | `Enable` | `bool` | Toggle tracing |
+| | `Exporter` | `ExporterType` | `stdout` / `http` / `grpc` |
+| | `RemoteAddr` | `string` | HTTP URL or gRPC address |
+| | `Headers` | `map[string]string` | Request headers for HTTP/gRPC |
+| | `Pretty` | `bool` | Pretty-print stdout |
+| | `SamplingRatio` | `float64` | Sampling ratio (0.0–1.0) |
+| `MetricConfig` | `Enable` | `bool` | Toggle metrics |
+| | `Exporter` | `ExporterType` | `stdout` / `http` / `grpc` / `prometheus` |
+| | `RemoteAddr` | `string` | HTTP URL or gRPC address |
+| | `Headers` | `map[string]string` | Request headers for HTTP/gRPC |
+| | `Pretty` | `bool` | Pretty-print stdout |
+| | `IntervalSeconds` | `int` | Export interval in seconds |
+| | `EnableRuntimeMetrics` | `bool` | Go runtime metrics |
+| | `CardinalityLimit` | `int` | Max unique label combinations per instrument |
 
 ## Features
 
@@ -129,6 +186,7 @@ server := grpc.NewServer(
 ### Exporters
 
 - `ExporterTypeStdout` - Console output
+- `ExporterTypeFile` - File output (log only, with rotation)
 - `ExporterTypeHTTP` - OTLP over HTTP
 - `ExporterTypeGRPC` - OTLP over gRPC
 - `ExporterTypePrometheus` - Prometheus (metrics only)
