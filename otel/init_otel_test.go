@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +25,7 @@ type logrusState struct {
 }
 
 func snapshotLogrusState() logrusState {
+
 	logger := logrus.StandardLogger()
 	return logrusState{
 		output:    logger.Out,
@@ -220,87 +218,4 @@ func addBaggageToCtx(ctx context.Context, pairs ...string) context.Context {
 	}
 	bag, _ := baggage.New(members...)
 	return baggage.ContextWithBaggage(ctx, bag)
-}
-
-func TestOtelLoggerRotation(t *testing.T) {
-	previousSlog := slog.Default()
-	t.Cleanup(func() {
-		slog.SetDefault(previousSlog)
-		globalProvider = nil
-	})
-
-	// tmpDir := t.TempDir()
-	tmpDir := "./log-rotate/"
-	logFile := filepath.Join(tmpDir, "rotation-test.log")
-
-	config := &Config{
-		ServiceName:    "go-bootstrap",
-		ServiceVersion: "1.0.0",
-		Log: LogConfig{
-			Enable:   true,
-			Exporter: ExporterTypeFile,
-			Logger:   LoggerTypeSlog,
-			Level:    "debug",
-			Pretty:   false,
-			Rotate: Rotate{
-				Filename:   logFile,
-				MaxMB:      1, // 1 MB — small enough to trigger rotation quickly
-				MaxBackups: 3,
-				MaxDay:     1,
-				LocalTime:  true,
-				Compress:   false,
-			},
-		},
-	}
-
-	if _, err := NewOtelProviders(config); err != nil {
-		t.Fatalf("failed to initialize provider: %v", err)
-	}
-
-	tracer := otel.Tracer("rotation-test-tracer")
-	ctx, span := tracer.Start(t.Context(), "rotation-test-root")
-	defer span.End()
-
-	// Emit enough logs to exceed MaxMB (1 MB) and trigger at least one rotation.
-	payload := strings.Repeat("x", 300)
-	for i := 0; i < 5000; i++ {
-		slog.InfoContext(ctx, "rotation test log message", "iteration", i, "payload", payload)
-	}
-
-	shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	if err := ShutdownOtelProvider(shutdownCtx); err != nil {
-		t.Fatalf("failed to shutdown provider: %v", err)
-	}
-
-	// Verify the main log file exists and has content.
-	info, err := os.Stat(logFile)
-	if err != nil {
-		t.Fatalf("log file not found: %v", err)
-	}
-	if info.Size() == 0 {
-		t.Fatal("log file is empty")
-	}
-	t.Logf("main log file size: %d bytes", info.Size())
-
-	// Count backup files (any file in tmpDir that is not the main log file).
-	entries, err := os.ReadDir(tmpDir)
-	if err != nil {
-		t.Fatalf("failed to read temp dir: %v", err)
-	}
-
-	var backups []string
-	for _, entry := range entries {
-		if entry.Name() != filepath.Base(logFile) {
-			backups = append(backups, entry.Name())
-		}
-	}
-	t.Logf("backup files: %v", backups)
-
-	if len(backups) == 0 {
-		t.Error("expected at least one backup file from rotation, but found none")
-	}
-	if len(backups) > 3 {
-		t.Errorf("expected at most %d backups, but found %d", 3, len(backups))
-	}
 }

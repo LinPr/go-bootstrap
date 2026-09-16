@@ -29,5 +29,6 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
-otel/log-rotate/
+test/filelog/logs/
+test/docker/
 
