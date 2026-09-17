@@ -136,7 +136,7 @@ func DefaultConfig() *Config {
 			Headers:    map[string]string{},
 			Pretty:     true,
 			Rotate: Rotate{
-				Filename:   "./log/go-bootstrap.json",
+				Filename:   "", // default to emit log to stdout when file exporter is used
 				MaxMB:      1024,
 				MaxDay:     1,
 				MaxBackups: 7,

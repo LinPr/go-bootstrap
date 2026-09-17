@@ -31,4 +31,5 @@ go.work.sum
 .vscode/
 test/filelog/logs/
 test/docker/
+test/backup/
 

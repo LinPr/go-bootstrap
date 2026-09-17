@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"sync"
 	"sync/atomic"
 
 	"github.com/LinPr/go-bootstrap/otel/otlplogfile/transform"
@@ -21,6 +22,7 @@ type Exporter struct {
 	writer  io.Writer
 	buf     bytes.Buffer
 	stopped atomic.Bool
+	mu      sync.Mutex
 	// timestamps bool
 	// inst       *observ.Instrumentation
 }
@@ -40,8 +42,9 @@ func New(options ...Option) (*Exporter, error) {
 
 var transformResourceLogs = transform.ResourceLogs
 
+// Exporter handles the delivery of log records to external receivers.
+// Any of the Exporter's methods may be called concurrently with itself or with other methods. It is the responsibility of the Exporter to manage this concurrency.
 func (e *Exporter) Export(ctx context.Context, records []log.Record) error {
-	defer e.buf.Reset()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -53,7 +56,9 @@ func (e *Exporter) Export(ctx context.Context, records []log.Record) error {
 
 	pbRequest := &collogpb.ExportLogsServiceRequest{ResourceLogs: resourceLogs}
 
-	b, err := protojson.MarshalOptions{}.Marshal(pbRequest)
+	b, err := protojson.MarshalOptions{
+		UseEnumNumbers: true,
+	}.Marshal(pbRequest)
 	if err != nil {
 		return err
 	}
@@ -68,19 +73,23 @@ func (e *Exporter) Export(ctx context.Context, records []log.Record) error {
 	if err != nil {
 		return err
 	}
+	{
+		e.mu.Lock()
 
-	if _, err = e.buf.Write(b); err != nil {
-		return err
+		if _, err = e.buf.Write(b); err != nil {
+			return err
+		}
+
+		if err := e.buf.WriteByte('\n'); err != nil {
+			return err
+		}
+
+		if _, err := e.writer.Write(e.buf.Bytes()); err != nil {
+			return err
+		}
+		e.buf.Reset()
+		e.mu.Unlock()
 	}
-
-	if err := e.buf.WriteByte('\n'); err != nil {
-		return err
-	}
-
-	if _, err := e.writer.Write(e.buf.Bytes()); err != nil {
-		return err
-	}
-
 	return nil
 }
 
