@@ -17,7 +17,7 @@ import (
 func TestOtelLoggerRotation(t *testing.T) {
 	tmpDir := "./logs/"
 	logFile := filepath.Join(tmpDir, "app.log")
-	logFile = "stdout"
+
 	rotate := otel.Rotate{
 		Filename:   logFile,
 		MaxMB:      1, // 1 MB — small enough to trigger rotation quickly
@@ -70,7 +70,7 @@ func TestOtelLoggerRotation(t *testing.T) {
 			t.Fatalf("failed to shutdown provider: %v", err)
 		}
 
-		// verifyRotation(t)
+		verifyRotation(t)
 	})
 
 	t.Run("concurrent", func(t *testing.T) {
