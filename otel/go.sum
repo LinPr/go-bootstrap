@@ -39,8 +39,6 @@ go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/bridges/otellogr v0.20.1 h1:O2p4UHkAxwqAA8gLh81lfFIdu+4KbjjjcwoqT1qkP08=
 go.opentelemetry.io/contrib/bridges/otellogr v0.20.1/go.mod h1:qUWXl3rTokzg1xZXtsCh+59ztscturx78d22XGKw4Lw=
-go.opentelemetry.io/contrib/bridges/otellogrus v0.20.1 h1:1PRZlOFoCSOqbR60EtEqDeiwdzCBDP1UZzyqbfsbAec=
-go.opentelemetry.io/contrib/bridges/otellogrus v0.20.1/go.mod h1:DoU/IobakgwkiiqIidVapEzVUl45hVeCV0aJKPkIwtE=
 go.opentelemetry.io/contrib/bridges/otelslog v0.20.1 h1:5sHc4ToTFjfSZCtGAAM6jPunICAmJX73htv372T4ipc=
 go.opentelemetry.io/contrib/bridges/otelslog v0.20.1/go.mod h1:oa6kgvyz/3GYW04dohd0++xJIH4xdQY8PAbpeCMaM8M=
 go.opentelemetry.io/contrib/bridges/otelzap v0.20.1 h1:piZS6uocc7ODKtb9Fq2ayIVOT+N8jfvWhfoA9QTxef4=

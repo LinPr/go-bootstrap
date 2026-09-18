@@ -129,7 +129,7 @@ func DefaultConfig() *Config {
 		ServiceVersion: "0.0.0",
 		Log: LogConfig{
 			Enable:     true,
-			Exporter:   ExporterTypeFile,
+			Exporter:   ExporterTypeStdout,
 			Logger:     LoggerTypeSlog,
 			Level:      "info",
 			RemoteAddr: "",

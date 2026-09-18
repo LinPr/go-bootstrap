@@ -6,7 +6,6 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/sirupsen/logrus v1.10.2
 	go.opentelemetry.io/contrib/bridges/otellogr v0.20.1
-	go.opentelemetry.io/contrib/bridges/otellogrus v0.20.1
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/contrib/bridges/otelzap v0.20.1
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.71.0
