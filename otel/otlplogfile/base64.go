@@ -15,9 +15,9 @@ func base64ToHex(s string) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// convertTraceIDs walks the OTLP JSON structure and converts base64-encoded
-// traceId/spanId fields in each log record to their hex representation.
-func convertTraceIDs(data map[string]any) {
+// decodeSpanIDs walks the OTLP JSON structure and converts base64-encoded
+// spanId fields in each log record to their hex representation.
+func decodeSpanIDs(data map[string]any) {
 	resourceLogs, ok := data["resourceLogs"].([]any)
 	if !ok {
 		return

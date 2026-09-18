@@ -3,7 +3,6 @@ package otel
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -82,10 +81,6 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Metric.EnableRuntimeMetrics = config.Metric.EnableRuntimeMetrics
 		conf.Metric.CardinalityLimit = cmp.Or(config.Metric.CardinalityLimit, conf.Metric.CardinalityLimit)
 	}
-
-	j, _ := json.Marshal(conf)
-
-	fmt.Println(string(j))
 
 	p := &OtelProviders{
 		logProvider:    nil,
