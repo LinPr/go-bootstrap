@@ -1,7 +1,6 @@
 package otlplogfile
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,10 +19,8 @@ var _ log.Exporter = &Exporter{}
 // Exporter must be created with [New].
 type Exporter struct {
 	writer  io.Writer
-	buf     bytes.Buffer
 	stopped atomic.Bool
 	mu      sync.Mutex
-	// timestamps bool
 	// inst       *observ.Instrumentation
 }
 
@@ -31,13 +28,12 @@ type Exporter struct {
 func New(options ...Option) (*Exporter, error) {
 	cfg := newConfig(options)
 
-	e := &Exporter{
+	return &Exporter{
 		writer: cfg.Writer,
-	}
-
-	var err error
-	// e.inst, err = observ.NewInstrumentation(counter.NextExporterID())
-	return e, err
+	}, nil
+	// var err error
+	// // e.inst, err = observ.NewInstrumentation(counter.NextExporterID())
+	// return e, err
 }
 
 var transformResourceLogs = transform.ResourceLogs
@@ -67,28 +63,16 @@ func (e *Exporter) Export(ctx context.Context, records []log.Record) error {
 	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	convertTraceIDs(data)
 
-	b, err = json.Marshal(data)
-	if err != nil {
-		return err
-	}
+	decodeSpanIDs(data)
+
 	{
 		e.mu.Lock()
+		defer e.mu.Unlock()
 
-		if _, err = e.buf.Write(b); err != nil {
+		if err := json.NewEncoder(e.writer).Encode(&data); err != nil {
 			return err
 		}
-
-		if err := e.buf.WriteByte('\n'); err != nil {
-			return err
-		}
-
-		if _, err := e.writer.Write(e.buf.Bytes()); err != nil {
-			return err
-		}
-		e.buf.Reset()
-		e.mu.Unlock()
 	}
 	return nil
 }

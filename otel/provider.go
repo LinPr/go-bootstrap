@@ -3,16 +3,11 @@ package otel
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/bridges/otellogr"
-	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -86,10 +81,6 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Metric.EnableRuntimeMetrics = config.Metric.EnableRuntimeMetrics
 		conf.Metric.CardinalityLimit = cmp.Or(config.Metric.CardinalityLimit, conf.Metric.CardinalityLimit)
 	}
-
-	j, _ := json.Marshal(conf)
-
-	fmt.Println(string(j))
 
 	p := &OtelProviders{
 		logProvider:    nil,
@@ -175,7 +166,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 		logExporter,
 	)
 	if logConfig.Logger == LoggerTypeSlog {
-		slogSeverity, _, _, err := parseLogLevel(logConfig.Level)
+		slogSeverity, _, err := parseLogLevel(logConfig.Level)
 		if err != nil {
 			return err
 		}
@@ -207,7 +198,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 // setupLoggerBridge configures the log bridge.
 func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 
-	_, zapLevel, logrusLevel, err := parseLogLevel(logConfig.Level)
+	_, zapLevel, err := parseLogLevel(logConfig.Level)
 	if err != nil {
 		return err
 	}
@@ -247,31 +238,30 @@ func (p *OtelProviders) setupLoggerBridge(logConfig *LogConfig) error {
 
 	case LoggerTypeLogrus:
 
-		hook := otellogrus.NewHook(
-			"global",
-			otellogrus.WithLoggerProvider(p.logProvider),
-		)
-		logger := logrus.New()
-		logger.AddHook(hook)
-		logger.SetLevel(logrusLevel)
+		// hook := otellogrus.NewHook(
+		// 	"global",
+		// 	otellogrus.WithLoggerProvider(p.logProvider),
+		// )
+		// logger := logrus.New()
+		// logger.AddHook(hook)
+		// logger.SetLevel(logrusLevel)
 
-		// Set as the global logger.
-		logrus.SetFormatter(logger.Formatter)
-		logrus.SetOutput(logger.Out)
-		logrus.SetLevel(logger.Level)
-		logrus.AddHook(hook)
+		// // Set as the global logger.
+		// logrus.SetFormatter(logger.Formatter)
+		// logrus.SetOutput(logger.Out)
+		// logrus.SetLevel(logger.Level)
+		// logrus.AddHook(hook)
 
 	case LoggerTypeLogr:
-		logSink := otellogr.NewLogSink(
-			"global",
-			otellogr.WithLoggerProvider(p.logProvider),
-		)
-		// logr instances are managed by the caller; this only creates an example.
-		loggger := logr.New(logSink)
-		// TODO:
-		_ = loggger     // Avoid unused warnings; applications can use this logger.
-		_ = logrusLevel // otellogr bridge currently has no min-level option equivalent to slog/zap/logrus.
-		// otel.SetLogger(loggger)
+		// logSink := otellogr.NewLogSink(
+		// 	"global",
+		// 	otellogr.WithLoggerProvider(p.logProvider),
+		// )
+		// // logr instances are managed by the caller; this only creates an example.
+		// loggger := logr.New(logSink)
+		// // TODO:
+		// _ = loggger // Avoid unused warnings; applications can use this logger.
+		// // otel.SetLogger(loggger)
 	default:
 		return fmt.Errorf("unsupported logger type: %s", logConfig.Logger)
 	}

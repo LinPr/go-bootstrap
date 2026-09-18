@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.uber.org/zap/zapcore"
 )
@@ -42,20 +41,20 @@ func (l otelSeverityLogger) Enabled(ctx context.Context, param otellog.EnabledPa
 	return l.Logger.Enabled(ctx, param)
 }
 
-func parseLogLevel(level string) (otellog.Severity, zapcore.Level, logrus.Level, error) {
+func parseLogLevel(level string) (otellog.Severity, zapcore.Level, error) {
 	// Normalize the level string to lowercase and trim whitespace for comparison.
 	normalized := cmp.Or(strings.ToLower(strings.TrimSpace(level)), "info")
 
 	switch normalized {
 	case "debug":
-		return otellog.SeverityDebug, zapcore.DebugLevel, logrus.DebugLevel, nil
+		return otellog.SeverityDebug, zapcore.DebugLevel, nil
 	case "info":
-		return otellog.SeverityInfo, zapcore.InfoLevel, logrus.InfoLevel, nil
+		return otellog.SeverityInfo, zapcore.InfoLevel, nil
 	case "warn":
-		return otellog.SeverityWarn, zapcore.WarnLevel, logrus.WarnLevel, nil
+		return otellog.SeverityWarn, zapcore.WarnLevel, nil
 	case "error":
-		return otellog.SeverityError, zapcore.ErrorLevel, logrus.ErrorLevel, nil
+		return otellog.SeverityError, zapcore.ErrorLevel, nil
 	default:
-		return 0, 0, 0, fmt.Errorf("unsupported log level: %s", level)
+		return 0, 0, fmt.Errorf("unsupported log level: %s", level)
 	}
 }
