@@ -8,9 +8,6 @@ const (
 	ExporterTypeFile   ExporterType = "file"
 	ExporterTypeHTTP   ExporterType = "http"
 	ExporterTypeGRPC   ExporterType = "grpc"
-
-	// ExporterTypePrometheus is the Prometheus exporter (Metric only).
-	ExporterTypePrometheus ExporterType = "prometheus"
 )
 
 // LoggerType defines log bridge types.
@@ -29,12 +26,33 @@ type Config struct {
 	ServiceName string
 	// ServiceVersion is the service version.
 	ServiceVersion string
+	// ResourceAttributes is a list of additional resource attributes for the service.
+	ResourceAttributes []AttributekeyValue
 	// Log is the log configuration.
 	Log LogConfig
 	// Trace is the trace configuration.
 	Trace TraceConfig
 	// Metric is the metric configuration.
 	Metric MetricConfig
+}
+
+type AttributekeyValue struct {
+	// The attribute key.
+	// Property is required and must be non-null.
+	Key string
+
+	// The attribute value.
+	// Values include:
+	// * bool: Boolean attribute value.
+	// * bool_array: Boolean array attribute value.
+	// * double: Double attribute value.
+	// * double_array: Double array attribute value.
+	// * int: Integer attribute value.
+	// * int_array: Integer array attribute value.
+	// * string: String attribute value.
+	// * string_array: String array attribute value.
+	// If omitted, string is used.
+	Value any
 }
 
 // LogConfig holds log settings.
@@ -106,7 +124,8 @@ type TraceConfig struct {
 type MetricConfig struct {
 	// Enable toggles metrics.
 	Enable bool
-	// Exporter is the exporter type: stdout, http, grpc, prometheus.
+	// Exporter is the exporter type: stdout, http, grpc.
+	// Note: prometheus Reader is added for metrics debugging by default, users are responsible for registering the /metrics endpoint.
 	Exporter ExporterType
 	// RemoteAddr is the remote address for HTTP and gRPC.
 	RemoteAddr string
@@ -125,8 +144,9 @@ type MetricConfig struct {
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		ServiceName:    "go-bootstrap",
-		ServiceVersion: "0.0.0",
+		ServiceName:        "go-bootstrap",
+		ServiceVersion:     "0.0.0",
+		ResourceAttributes: []AttributekeyValue{},
 		Log: LogConfig{
 			Enable:     true,
 			Exporter:   ExporterTypeStdout,

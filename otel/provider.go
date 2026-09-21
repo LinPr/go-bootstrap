@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"time"
 
+	"github.com/LinPr/go-bootstrap/otel/kv"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
@@ -40,6 +44,7 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		// Top-level fields.
 		conf.ServiceName = cmp.Or(config.ServiceName, conf.ServiceName)
 		conf.ServiceVersion = cmp.Or(config.ServiceVersion, conf.ServiceVersion)
+		conf.ResourceAttributes = slices.Clone(config.ResourceAttributes)
 
 		// Log config.
 		conf.Log.Enable = config.Log.Enable
@@ -47,9 +52,8 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Log.Logger = cmp.Or(config.Log.Logger, conf.Log.Logger)
 		conf.Log.Level = cmp.Or(config.Log.Level, conf.Log.Level)
 		conf.Log.RemoteAddr = cmp.Or(config.Log.RemoteAddr, conf.Log.RemoteAddr)
-		if config.Log.Headers != nil {
-			conf.Log.Headers = config.Log.Headers
-		}
+		maps.Copy(conf.Log.Headers, config.Log.Headers)
+
 		conf.Log.Pretty = config.Log.Pretty
 		conf.Log.AttributeCountLimit = cmp.Or(config.Log.AttributeCountLimit, conf.Log.AttributeCountLimit)
 		conf.Log.Rotate.Filename = cmp.Or(config.Log.Rotate.Filename, conf.Log.Rotate.Filename)
@@ -63,9 +67,7 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Trace.Enable = config.Trace.Enable
 		conf.Trace.Exporter = cmp.Or(config.Trace.Exporter, conf.Trace.Exporter)
 		conf.Trace.RemoteAddr = cmp.Or(config.Trace.RemoteAddr, conf.Trace.RemoteAddr)
-		if config.Trace.Headers != nil {
-			conf.Trace.Headers = config.Trace.Headers
-		}
+		maps.Copy(conf.Trace.Headers, config.Trace.Headers)
 		conf.Trace.Pretty = config.Trace.Pretty
 		conf.Trace.SamplingRatio = cmp.Or(config.Trace.SamplingRatio, conf.Trace.SamplingRatio)
 
@@ -73,9 +75,7 @@ func newOtelProviders(config *Config) (*OtelProviders, error) {
 		conf.Metric.Enable = config.Metric.Enable
 		conf.Metric.Exporter = cmp.Or(config.Metric.Exporter, conf.Metric.Exporter)
 		conf.Metric.RemoteAddr = cmp.Or(config.Metric.RemoteAddr, conf.Metric.RemoteAddr)
-		if config.Metric.Headers != nil {
-			conf.Metric.Headers = config.Metric.Headers
-		}
+		maps.Copy(conf.Metric.Headers, config.Metric.Headers)
 		conf.Metric.Pretty = config.Metric.Pretty
 		conf.Metric.IntervalSeconds = cmp.Or(config.Metric.IntervalSeconds, conf.Metric.IntervalSeconds)
 		conf.Metric.EnableRuntimeMetrics = config.Metric.EnableRuntimeMetrics
@@ -101,7 +101,7 @@ func (p *OtelProviders) initialize(c *Config) error {
 	p.initPropagator()
 
 	// Create the resource.
-	res, err := p.createResource(c.ServiceName, c.ServiceVersion)
+	res, err := p.createResource(c.ServiceName, c.ServiceVersion, c.ResourceAttributes)
 	if err != nil {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
@@ -125,8 +125,12 @@ func (p *OtelProviders) initialize(c *Config) error {
 }
 
 // createResource creates an OpenTelemetry resource.
-func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*resource.Resource, error) {
+func (p *OtelProviders) createResource(serviceName, serviceVersion string, resourceAttributes []AttributekeyValue) (*resource.Resource, error) {
 
+	attrs := make([]attribute.KeyValue, 0, len(resourceAttributes))
+	for _, ra := range resourceAttributes {
+		attrs = append(attrs, kv.FromNameValue(ra.Key, ra.Value))
+	}
 	return resource.New(
 		context.Background(),
 		resource.WithFromEnv(), // Read environment variables first.
@@ -134,6 +138,7 @@ func (p *OtelProviders) createResource(serviceName, serviceVersion string) (*res
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),
 		),
+		resource.WithAttributes(attrs...),
 		// resource.WithHost(),  // not recommend, may cause high cardinality
 		// resource.WithProcess(),
 		// resource.WithTelemetrySDK(),
@@ -184,6 +189,7 @@ func (p *OtelProviders) initLog(logConfig *LogConfig, res *resource.Resource) er
 		log.WithAttributeCountLimit(logConfig.AttributeCountLimit),
 	)
 
+	// TODO: update this to use logs api not ask when otel 1.47 version released
 	global.SetLoggerProvider(p.logProvider)
 
 	// Configure the global log bridge based on the selected logger type.
@@ -299,37 +305,32 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 		return nil
 	}
 
-	var meterProvider *metric.MeterProvider
-
-	if metricConfig.Exporter == ExporterTypePrometheus {
-		promeExporter, err := prometheus.New()
-		if err != nil {
-			return fmt.Errorf("failed to create prometheus exporter: %w", err)
-		}
-		meterProvider = metric.NewMeterProvider(
-			metric.WithReader(promeExporter),
-			metric.WithResource(res),
-			metric.WithExemplarFilter(exemplar.TraceBasedFilter),
-		)
-
-	} else {
-		metricExporter, err := createMetricExporter(metricConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create metric exporter: %w", err)
-		}
-
-		meterProvider = metric.NewMeterProvider(
-			metric.WithReader(
-				metric.NewPeriodicReader(
-					metricExporter,
-					metric.WithInterval(time.Duration(metricConfig.IntervalSeconds)*time.Second),
-				),
-			),
-			metric.WithResource(res),
-			metric.WithCardinalityLimit(metricConfig.CardinalityLimit),
-			metric.WithExemplarFilter(exemplar.TraceBasedFilter),
-		)
+	promeExporter, err := prometheus.New()
+	if err != nil {
+		return fmt.Errorf("failed to create prometheus exporter: %w", err)
 	}
+
+	otlpExporter, err := createMetricExporter(metricConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create metric exporter: %w", err)
+	}
+
+	// both OTLP and Prometheus readers are added to the meter provider.
+	meterProvider := metric.NewMeterProvider(
+		metric.WithReader(
+			promeExporter,
+		),
+		metric.WithReader(
+			metric.NewPeriodicReader(
+				otlpExporter,
+				metric.WithInterval(time.Duration(metricConfig.IntervalSeconds)*time.Second),
+				// metric.WithTimeout()
+			),
+		),
+		metric.WithResource(res),
+		metric.WithCardinalityLimit(metricConfig.CardinalityLimit),
+		metric.WithExemplarFilter(exemplar.TraceBasedFilter),
+	)
 
 	p.metricProvider = meterProvider
 	otel.SetMeterProvider(meterProvider)

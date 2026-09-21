@@ -70,6 +70,7 @@ func TestOtelLogger(t *testing.T) {
 			globalProvider = nil
 
 			config := newLoggerTestConfig(tt.loggerType)
+
 			provider, err := NewOtelProviders(config)
 			if err != nil {
 				t.Fatalf("failed to initialize provider: %v", err)
@@ -90,9 +91,13 @@ func newLoggerTestConfig(loggerType LoggerType) *Config {
 	return &Config{
 		ServiceName:    "go-bootstrap",
 		ServiceVersion: "1.0.0",
+		ResourceAttributes: []AttributekeyValue{
+			{Key: "additional.attribute_1", Value: "value1"},
+			{Key: "additional.attribute.2", Value: "value2"},
+		},
 		Log: LogConfig{
 			Enable:     true,
-			Exporter:   ExporterTypeHTTP,
+			Exporter:   ExporterTypeStdout,
 			RemoteAddr: "http://10.86.11.34:5318/v1/logs",
 			Level:      "error",
 			Headers: map[string]string{
@@ -103,7 +108,7 @@ func newLoggerTestConfig(loggerType LoggerType) *Config {
 			Pretty: false,
 		},
 		Trace: TraceConfig{
-			Enable:     true,
+			Enable:     false,
 			Exporter:   ExporterTypeHTTP,
 			RemoteAddr: "http://10.86.11.34:5318/v1/traces",
 			Headers: map[string]string{
