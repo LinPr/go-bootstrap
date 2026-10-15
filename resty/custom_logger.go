@@ -1,0 +1,128 @@
+package resty
+
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"resty.dev/v3"
+)
+
+type slogLogger struct {
+	LogBlackList LogBlackList
+}
+
+type Option func(*slogLogger)
+
+// LogBlackList is used to specify messages that should be ignored in the logs.
+type LogBlackList struct {
+	Message []string
+}
+
+func WithLogBlackList(blackList LogBlackList) Option {
+	return func(l *slogLogger) {
+		l.LogBlackList = blackList
+	}
+}
+
+func NewSlogLogger(opts ...Option) resty.Logger {
+	logger := &slogLogger{}
+	for _, opt := range opts {
+		opt(logger)
+	}
+	return logger
+}
+
+func transform(format string, args ...any) (string, []any) {
+	msg := fmt.Sprintf(format, args...)
+	data := &restyLog{}
+	err := json.Unmarshal([]byte(msg), data)
+	if err != nil {
+		slog.Error("Failed to unmarshal resty log JSON: " + err.Error())
+	}
+
+	logmsg := fmt.Sprintf("http outgoing: %s %s://%s%s %d", data.Method, data.Proto, data.Host, data.URI, data.StatusCode)
+	logargs := []any{
+		"method", data.Method,
+		"url", fmt.Sprintf("%s://%s%s", data.Proto, data.Host, data.URI),
+		"status_code", data.StatusCode,
+		"status", data.Status,
+		"request_body", data.RequestBody,
+		"response_body", data.ResponseBody,
+		"curl_cmd", data.CurlCmd,
+	}
+	return logmsg, logargs
+}
+
+func (l *slogLogger) verifyShouldLog(logmsg string, logargs []any) bool {
+	for _, msg := range l.LogBlackList.Message {
+		if strings.Contains(logmsg, msg) {
+			return false
+		}
+	}
+	return true
+}
+
+func (l *slogLogger) Errorf(format string, args ...any) {
+	logmsg, logargs := transform(format, args...)
+	if !l.verifyShouldLog(logmsg, logargs) {
+		return
+	}
+	slog.Error(logmsg, logargs...)
+}
+
+func (l *slogLogger) Warnf(format string, args ...any) {
+	logmsg, logargs := transform(format, args...)
+	if !l.verifyShouldLog(logmsg, logargs) {
+		return
+	}
+	slog.Warn(logmsg, logargs...)
+}
+
+func (l *slogLogger) Debugf(format string, args ...any) {
+	logmsg, logargs := transform(format, args...)
+	if !l.verifyShouldLog(logmsg, logargs) {
+		return
+	}
+	slog.Debug(logmsg, logargs...)
+}
+
+type restyLog struct {
+	Method       string      `json:"method"`
+	Proto        string      `json:"proto"`
+	Host         string      `json:"host"`
+	URI          string      `json:"uri"`
+	ReqHeaders   http.Header `json:"req_headers"`
+	RequestBody  string      `json:"request_body"`
+	Status       string      `json:"status"`
+	StatusCode   int         `json:"status_code"`
+	ResponseBody string      `json:"response_body"`
+	CurlCmd      string      `json:"curl_cmd"`
+	Action       string      `json:"Action"`
+}
+
+func CustomLogFormatter(dl *resty.DebugLog) string {
+	action := &restyLog{}
+	_ = json.Unmarshal([]byte(dl.Request.Body), action)
+
+	data := &restyLog{
+		Method:       dl.Request.Method,
+		Proto:        dl.Request.Proto,
+		Host:         dl.Request.Host,
+		URI:          dl.Request.URI,
+		ReqHeaders:   dl.Request.Header,
+		RequestBody:  dl.Request.Body,
+		Status:       dl.Response.Status,
+		StatusCode:   dl.Response.StatusCode,
+		ResponseBody: dl.Response.Body,
+		CurlCmd:      dl.Request.CurlCmd,
+		Action:       action.Action,
+	}
+	j, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("Failed to encode JSON: " + err.Error())
+	}
+	return string(j)
+}
