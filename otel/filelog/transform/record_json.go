@@ -2,6 +2,7 @@ package transform
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	api "go.opentelemetry.io/otel/log"
@@ -98,26 +99,61 @@ func logValueToAny(v api.Value) any {
 	}
 }
 
+// recordAlias strips RecordJSON's MarshalJSON method so json.Marshal encodes
+// the declared fields instead of recursing into MarshalJSON. The `json:"-"` tag
+// on the promoted Attributes field still applies, so the alias never emits the
+// attribute map as a nested object.
+type recordAlias RecordJSON
+
+// MarshalJSON encodes the record with its attributes flattened in alongside the
+// declared fields.
+//
+// It marshals the struct once, drops the closing brace, and splices the
+// attribute pairs in before closing the object again. The attributes are
+// written last so a key that collides with a declared field (say "body") loses
+// to the attribute. Note that JSON objects with duplicate keys are legal but
+// ambiguous; most decoders, including encoding/json, keep the last occurrence.
 func (r RecordJSON) MarshalJSON() ([]byte, error) {
-	type Alias RecordJSON
-	aux := struct {
-		*Alias
-	}{
-		Alias: (*Alias)(&r),
-	}
-	data, err := json.Marshal(aux)
+	head, err := json.Marshal(recordAlias(r))
 	if err != nil {
 		return nil, err
 	}
 
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
-	}
+	// head is always a non-empty object: Body, TraceID, SpanID, TraceFlags and
+	// DroppedAttributes have no omitempty, so there is a trailing '}' to drop
+	// and at least one pair before it.
+	buf := make([]byte, 0, len(head)+len(r.Attributes)*32)
+	buf = append(buf, head[:len(head)-1]...)
 
 	for k, v := range r.Attributes {
-		m[k] = v
+		key, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		val, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("marshal attribute %q: %w", k, err)
+		}
+		buf = append(buf, ',')
+		buf = append(buf, key...)
+		buf = append(buf, ':')
+		buf = append(buf, val...)
 	}
 
-	return json.Marshal(m)
+	return append(buf, '}'), nil
+}
+
+// AppendRecordJSON appends the JSON encoding of r to dst and returns the
+// extended slice. Callers that encode many records in a row can reuse one
+// buffer across calls instead of letting each record allocate its own.
+//
+// A record that fails to encode is skipped: dst is returned with whatever was
+// appended for earlier records intact, and nothing partial for this one. That
+// keeps one malformed attribute value from poisoning a whole batch of logs.
+func AppendRecordJSON(dst []byte, r sdklog.Record) []byte {
+	b, err := NewRecordJSON(r).MarshalJSON()
+	if err != nil {
+		return dst
+	}
+	return append(dst, b...)
 }
