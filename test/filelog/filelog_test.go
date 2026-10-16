@@ -16,7 +16,7 @@ import (
 
 func TestOtelLoggerRotation(t *testing.T) {
 	tmpDir := "./logs/"
-	logFile := filepath.Join(tmpDir, "app.log")
+	logFile := filepath.Join(tmpDir, "file_otlp.log")
 
 	rotate := otel.Rotate{
 		Filename:   logFile,
@@ -104,6 +104,38 @@ func TestOtelLoggerRotation(t *testing.T) {
 
 		verifyRotation(t)
 	})
+}
+
+// TestFileJsonExporter verifies the file_json log exporter writes plain JSON
+// log records (one per line) instead of the OTLP JSON envelope.
+func TestFileJsonExporter(t *testing.T) {
+	logFile := filepath.Join("./logs/", "file_json.log")
+
+	rotate := otel.Rotate{
+		Filename:   logFile,
+		MaxMB:      1,
+		MaxBackups: 1,
+		MaxDay:     1,
+		LocalTime:  true,
+		Compress:   true,
+	}
+
+	// Start from a clean file so assertions only see this run's output.
+	if err := os.Remove(logFile); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to remove old log file: %v", err)
+	}
+
+	config.SetupFileJsonProvider(t, rotate)
+	for i := 0; i < 10000; i++ {
+		slog.Info("file json log message", "iteration", 1)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	if err := otel.ShutdownOtelProvider(shutdownCtx); err != nil {
+		t.Fatalf("failed to shutdown provider: %v", err)
+	}
+
 }
 
 func TestWriteLog(t *testing.T) {

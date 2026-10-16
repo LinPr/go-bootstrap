@@ -188,3 +188,40 @@ func SetupFilelogProvider(t *testing.T, rotate otel.Rotate) *otel.OtelProviders 
 
 	return provider
 }
+
+// SetupFileJsonProvider initializes an OTel provider configured for the
+// file_json log exporter, which writes plain JSON log records (one per line)
+// instead of the OTLP JSON envelope. Trace and metric exporting are disabled.
+func SetupFileJsonProvider(t *testing.T, rotate otel.Rotate) *otel.OtelProviders {
+	previousSlog := slog.Default()
+	t.Cleanup(func() {
+		slog.SetDefault(previousSlog)
+	})
+
+	config := &otel.Config{
+		ServiceName:    "go-bootstrap",
+		ServiceVersion: "1.0.0",
+		Log: otel.LogConfig{
+			Enable:   true,
+			Exporter: otel.ExporterTypeFileJson,
+			// Exporter: otel.ExporterTypeStdout,
+			Logger: otel.LoggerTypeSlog,
+			Level:  "debug",
+			Pretty: false,
+			Rotate: rotate,
+		},
+		Trace:  otel.TraceConfig{Enable: false},
+		Metric: otel.MetricConfig{Enable: false},
+	}
+
+	provider, err := otel.NewOtelProviders(config)
+	if err != nil {
+		t.Fatalf("failed to initialize provider: %v", err)
+	}
+
+	if provider.GetLoggerProvider() == nil {
+		t.Fatal("logger provider is nil")
+	}
+
+	return provider
+}
