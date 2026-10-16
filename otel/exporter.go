@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/LinPr/go-bootstrap/otel/otlplogfile"
+	"github.com/LinPr/go-bootstrap/otel/filelog"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -21,16 +21,27 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+const (
+	fileNameEmpty     = ""
+	fileNameStdout    = "stdout"
+	fileNameDevStdout = "/dev/stdout"
+)
+
 // createLogExporter creates a log exporter.
 func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, error) {
 	switch logConfig.Exporter {
-	case ExporterTypeFile:
-		opts := []otlplogfile.Option{}
+	case ExporterTypeFile, ExporterTypeFileOtlpJson, ExporterTypeFileJson:
+		opts := []filelog.Option{}
+
+		if logConfig.Exporter == ExporterTypeFileJson {
+			opts = append(opts, filelog.WithFormat(filelog.LogFormatJson))
+		}
+
 		switch logConfig.Rotate.Filename {
-		case "", "stdout", "/dev/stdout":
-			opts = append(opts, otlplogfile.WithWriter(os.Stdout))
+		case fileNameEmpty, fileNameStdout, fileNameDevStdout:
+			opts = append(opts, filelog.WithWriter(os.Stdout))
 		default:
-			opts = append(opts, otlplogfile.WithWriter(
+			opts = append(opts, filelog.WithWriter(
 				&lumberjack.Logger{
 					Filename:   logConfig.Rotate.Filename,
 					MaxSize:    logConfig.Rotate.MaxMB,
@@ -40,7 +51,7 @@ func (p *OtelProviders) createLogExporter(logConfig *LogConfig) (log.Exporter, e
 					Compress:   logConfig.Rotate.Compress,
 				}))
 		}
-		return otlplogfile.New(opts...)
+		return filelog.New(opts...)
 
 	case ExporterTypeStdout:
 		if logConfig.Pretty {

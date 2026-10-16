@@ -4,10 +4,12 @@ package otel
 type ExporterType string
 
 const (
-	ExporterTypeStdout ExporterType = "stdout"
-	ExporterTypeFile   ExporterType = "file"
-	ExporterTypeHTTP   ExporterType = "http"
-	ExporterTypeGRPC   ExporterType = "grpc"
+	ExporterTypeStdout       ExporterType = "stdout"
+	ExporterTypeHTTP         ExporterType = "http"
+	ExporterTypeGRPC         ExporterType = "grpc"
+	ExporterTypeFile         ExporterType = "file" // file exporter expoert otlp_json log to file by default
+	ExporterTypeFileJson     ExporterType = "file_json"
+	ExporterTypeFileOtlpJson ExporterType = "file_otlp_json" // file_otlp_json is the alias of file exporter
 )
 
 // LoggerType defines log bridge types.

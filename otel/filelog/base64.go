@@ -1,4 +1,4 @@
-package otlplogfile
+package filelog
 
 import (
 	"encoding/base64"
