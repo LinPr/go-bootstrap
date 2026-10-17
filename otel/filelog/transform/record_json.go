@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -26,38 +26,45 @@ type RecordJSON struct {
 	Attributes        `json:"-"`
 }
 
-func NewRecordJSON(r sdklog.Record) RecordJSON {
+func RecordJSONs(records []log.Record) []RecordJSON {
+	if len(records) == 0 {
+		return nil
+	}
+	recordJsons := make([]RecordJSON, 0, len(records))
+	for _, r := range records {
+		recordJson := RecordJSON{
+			EventName:         r.EventName(),
+			Scope:             r.InstrumentationScope().Name,
+			Severity:          r.SeverityText(),
+			Body:              r.Body().String(),
+			TraceID:           r.TraceID(),
+			SpanID:            r.SpanID(),
+			TraceFlags:        r.TraceFlags(),
+			DroppedAttributes: r.DroppedAttributes(),
+			Attributes:        make(Attributes, r.AttributesLen()),
+		}
 
-	newRecord := RecordJSON{
-		EventName:         r.EventName(),
-		Scope:             r.InstrumentationScope().Name,
-		Severity:          r.SeverityText(),
-		Body:              r.Body().String(),
-		TraceID:           r.TraceID(),
-		SpanID:            r.SpanID(),
-		TraceFlags:        r.TraceFlags(),
-		DroppedAttributes: r.DroppedAttributes(),
-		Attributes:        make(Attributes, r.AttributesLen()),
+		timestamp := r.Timestamp()
+		recordJson.Timestamp = &timestamp
+
+		for _, kv := range r.Resource().Attributes() {
+			recordJson.Attributes[string(kv.Key)] = kv.Value.AsInterface()
+		}
+
+		scopedAttr := r.InstrumentationScope().Attributes
+		for _, kv := range scopedAttr.ToSlice() {
+			recordJson.Attributes[string(kv.Key)] = kv.Value.AsInterface()
+		}
+
+		r.WalkAttributes(func(kv attribute.KeyValue) bool {
+			recordJson.Attributes[string(kv.Key)] = kv.Value.AsInterface()
+			return true
+		})
+
+		recordJsons = append(recordJsons, recordJson)
 	}
 
-	timestamp := r.Timestamp()
-	newRecord.Timestamp = &timestamp
-
-	for _, kv := range r.Resource().Attributes() {
-		newRecord.Attributes[string(kv.Key)] = kv.Value.AsInterface()
-	}
-
-	scopedAttr := r.InstrumentationScope().Attributes
-	for _, kv := range scopedAttr.ToSlice() {
-		newRecord.Attributes[string(kv.Key)] = kv.Value.AsInterface()
-	}
-
-	r.WalkAttributes(func(kv attribute.KeyValue) bool {
-		newRecord.Attributes[string(kv.Key)] = kv.Value.AsInterface()
-		return true
-	})
-
-	return newRecord
+	return recordJsons
 }
 
 // recordAlias strips RecordJSON's MarshalJSON method so json.Marshal encodes
@@ -105,21 +112,6 @@ func (r RecordJSON) MarshalJSON() ([]byte, error) {
 	return append(buf, '}'), nil
 }
 
-// AppendRecordJSON appends the JSON encoding of r to dst and returns the
-// extended slice. Callers that encode many records in a row can reuse one
-// buffer across calls instead of letting each record allocate its own.
-//
-// A record that fails to encode is skipped: dst is returned with whatever was
-// appended for earlier records intact, and nothing partial for this one. That
-// keeps one malformed attribute value from poisoning a whole batch of logs.
-func AppendRecordJSON(dst []byte, r sdklog.Record) []byte {
-	b, err := NewRecordJSON(r).MarshalJSON()
-	if err != nil {
-		return dst
-	}
-	return append(dst, b...)
-}
-
 // // RecordJSON is a JSON-serializable representation of a Record.
 // type RecordJSON struct {
 // 	Timestamp         *time.Time `json:",omitempty"`
@@ -137,9 +129,9 @@ func AppendRecordJSON(dst []byte, r sdklog.Record) []byte {
 // 	DroppedAttributes int
 // }
 
-// func NewRecordJSON(r sdklog.Record) RecordJSON {
+// func RecordJSON(r log.Record) RecordJSON {
 // 	res := r.Resource()
-// 	newRecord := RecordJSON{
+// 	recordJson := RecordJSON{
 // 		EventName:         r.EventName(),
 // 		Severity:          r.Severity(),
 // 		SeverityText:      r.SeverityText(),
@@ -154,14 +146,14 @@ func AppendRecordJSON(dst []byte, r sdklog.Record) []byte {
 // 	}
 
 // 	timestamp := r.Timestamp()
-// 	newRecord.Timestamp = &timestamp
+// 	recordJson.Timestamp = &timestamp
 // 	observedTimestamp := r.ObservedTimestamp()
-// 	newRecord.ObservedTimestamp = &observedTimestamp
+// 	recordJson.ObservedTimestamp = &observedTimestamp
 
 // 	r.WalkAttributes(func(kv attribute.KeyValue) bool {
-// 		newRecord.Attributes = append(newRecord.Attributes, kv)
+// 		recordJson.Attributes = append(recordJson.Attributes, kv)
 // 		return true
 // 	})
 
-// 	return newRecord
+// 	return recordJson
 // }

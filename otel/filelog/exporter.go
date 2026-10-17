@@ -28,9 +28,8 @@ type Exporter struct {
 	// mu serializes Export so concurrent callers cannot interleave their
 	// records, and guards the reusable buffers below.
 	mu      sync.Mutex
-	otlpBuf bytes.Buffer  // reusable scratch for the otlp_json format
-	otlpEnc *json.Encoder // encoder over otlpBuf
-	buf     []byte        // reusable encoding buffer for the json format
+	buf     bytes.Buffer  // reusable scratch for the otlp_json format
+	jsonEnc *json.Encoder // encoder over otlpBuf
 }
 
 // New creates an [Exporter].
@@ -42,13 +41,11 @@ func New(options ...Option) (*Exporter, error) {
 		format: cfg.Format,
 	}
 
-	exporter.otlpBuf.Grow(64 << 10)
-	exporter.otlpEnc = json.NewEncoder(&exporter.otlpBuf)
+	exporter.buf.Grow(64 << 10)
+	exporter.jsonEnc = json.NewEncoder(&exporter.buf)
 
 	return exporter, nil
 }
-
-var transformResourceLogs = transform.ResourceLogs
 
 // Export handles the delivery of log records to external receivers.
 // Any of the Exporter's methods may be called concurrently with itself or with
@@ -67,57 +64,43 @@ func (e *Exporter) Export(ctx context.Context, records []log.Record) error {
 
 	switch e.format {
 	case LogFormatOtlpJson:
-		return e.exportOtlpJson(records)
+		data, err := processOtlpJson(records)
+
+		if err != nil {
+			return err
+		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		e.buf.Reset()
+		if err := e.jsonEnc.Encode(data); err != nil {
+			return err
+		}
+		if _, err := e.writer.Write(e.buf.Bytes()); err != nil {
+			return err
+		}
+		return nil
 	case LogFormatJson:
-		return e.exportJSON(records)
+		recordJsons := transform.RecordJSONs(records)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.buf.Reset()
+
+		for _, recordJson := range recordJsons {
+			if err := e.jsonEnc.Encode(recordJson); err != nil {
+				return err
+			}
+		}
+
+		if _, err := e.writer.Write(e.buf.Bytes()); err != nil {
+			return err
+		}
+
+		return nil
 	default:
 		return fmt.Errorf("unsupported log format: %s", e.format)
 	}
-}
-
-// exportOtlpJson encodes the whole batch as one OTLP JSON envelope.
-func (e *Exporter) exportOtlpJson(records []log.Record) error {
-	data, err := processOtlpJson(records)
-	if err != nil {
-		return err
-	}
-	if data == nil {
-		return nil
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// Encode into the reusable buffer first: json.Encoder writes straight
-	// through to its io.Writer, and we want a single Write per batch (and none
-	// at all if encoding fails partway).
-	e.otlpBuf.Reset()
-	if err := e.otlpEnc.Encode(data); err != nil {
-		return err
-	}
-	if _, err := e.writer.Write(e.otlpBuf.Bytes()); err != nil {
-		return err
-	}
-	return nil
-}
-
-// exportJSON writes one JSON object per record, newline-terminated, using a
-// buffer reused across calls so a whole batch costs a single Write.
-func (e *Exporter) exportJSON(records []log.Record) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	buf := e.buf[:0]
-	for i := range records {
-		buf = transform.AppendRecordJSON(buf, records[i])
-		buf = append(buf, '\n')
-	}
-	e.buf = buf
-
-	if _, err := e.writer.Write(buf); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Shutdown shuts down the Exporter. Calls to Export after Shutdown return
@@ -127,11 +110,10 @@ func (e *Exporter) Shutdown(context.Context) error {
 	// Exporter still appears active.
 	e.stopped.Store(true)
 	e.mu.Lock()
-	e.buf = nil
-	e.otlpEnc = nil
-	e.otlpBuf.Reset()
+	defer e.mu.Unlock()
+	e.jsonEnc = nil
+	e.buf.Reset()
 	e.writer = io.Discard
-	e.mu.Unlock()
 	return nil
 }
 
@@ -141,7 +123,7 @@ func (*Exporter) ForceFlush(context.Context) error {
 }
 
 func processOtlpJson(records []log.Record) (map[string]any, error) {
-	resourceLogs := transformResourceLogs(records)
+	resourceLogs := transform.ResourceLogs(records)
 	if resourceLogs == nil {
 		return nil, nil
 	}
