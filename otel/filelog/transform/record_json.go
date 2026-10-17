@@ -6,7 +6,7 @@ import (
 	"time"
 
 	api "go.opentelemetry.io/otel/log"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -26,38 +26,45 @@ type RecordJSON struct {
 	Attributes        `json:"-"`
 }
 
-func NewRecordJSON(r sdklog.Record) RecordJSON {
+func RecordJSONs(records []log.Record) []RecordJSON {
+	if len(records) == 0 {
+		return nil
+	}
+	recordJsons := make([]RecordJSON, 0, len(records))
+	for _, r := range records {
+		recordJson := RecordJSON{
+			EventName:         r.EventName(),
+			Scope:             r.InstrumentationScope().Name,
+			Severity:          r.SeverityText(),
+			Body:              r.Body().String(),
+			TraceID:           r.TraceID(),
+			SpanID:            r.SpanID(),
+			TraceFlags:        r.TraceFlags(),
+			DroppedAttributes: r.DroppedAttributes(),
+			Attributes:        make(Attributes, r.AttributesLen()),
+		}
 
-	newRecord := RecordJSON{
-		EventName:         r.EventName(),
-		Scope:             r.InstrumentationScope().Name,
-		Severity:          r.SeverityText(),
-		Body:              r.Body().String(),
-		TraceID:           r.TraceID(),
-		SpanID:            r.SpanID(),
-		TraceFlags:        r.TraceFlags(),
-		DroppedAttributes: r.DroppedAttributes(),
-		Attributes:        make(Attributes, r.AttributesLen()),
+		timestamp := r.Timestamp()
+		recordJson.Timestamp = &timestamp
+
+		for _, kv := range r.Resource().Attributes() {
+			recordJson.Attributes[string(kv.Key)] = kv.Value.AsInterface()
+		}
+
+		scopedAttr := r.InstrumentationScope().Attributes
+		for _, kv := range scopedAttr.ToSlice() {
+			recordJson.Attributes[string(kv.Key)] = kv.Value.AsInterface()
+		}
+
+		r.WalkAttributes(func(kv api.KeyValue) bool {
+			recordJson.Attributes[kv.Key] = logValueToAny(kv.Value)
+			return true
+		})
+
+		recordJsons = append(recordJsons, recordJson)
 	}
 
-	timestamp := r.Timestamp()
-	newRecord.Timestamp = &timestamp
-
-	for _, kv := range r.Resource().Attributes() {
-		newRecord.Attributes[string(kv.Key)] = kv.Value.AsInterface()
-	}
-
-	scopedAttr := r.InstrumentationScope().Attributes
-	for _, kv := range scopedAttr.ToSlice() {
-		newRecord.Attributes[string(kv.Key)] = kv.Value.AsInterface()
-	}
-
-	r.WalkAttributes(func(kv api.KeyValue) bool {
-		newRecord.Attributes[kv.Key] = logValueToAny(kv.Value)
-		return true
-	})
-
-	return newRecord
+	return recordJsons
 }
 
 // logValueToAny converts a log record attribute value into something
@@ -141,19 +148,4 @@ func (r RecordJSON) MarshalJSON() ([]byte, error) {
 	}
 
 	return append(buf, '}'), nil
-}
-
-// AppendRecordJSON appends the JSON encoding of r to dst and returns the
-// extended slice. Callers that encode many records in a row can reuse one
-// buffer across calls instead of letting each record allocate its own.
-//
-// A record that fails to encode is skipped: dst is returned with whatever was
-// appended for earlier records intact, and nothing partial for this one. That
-// keeps one malformed attribute value from poisoning a whole batch of logs.
-func AppendRecordJSON(dst []byte, r sdklog.Record) []byte {
-	b, err := NewRecordJSON(r).MarshalJSON()
-	if err != nil {
-		return dst
-	}
-	return append(dst, b...)
 }
