@@ -55,8 +55,9 @@ func (l *slogLogger) transform(format string, args ...any) (string, []any) {
 		slog.Error("Failed to unmarshal resty log JSON: " + err.Error())
 	}
 
-	logmsg := fmt.Sprintf("http outgoing: %s %s://%s%s %d", data.Method, data.Proto, data.Host, data.URI, data.StatusCode)
+	logmsg := fmt.Sprintf("http outgoing: %s %s://%s%s %s %d", data.Method, data.Proto, data.Host, data.URI, data.Action, data.StatusCode)
 	logargMap := map[string]any{
+		"action":          data.Action,
 		"curl_cmd":        data.CurlCmd,
 		"method":          data.Method,
 		"url":             fmt.Sprintf("%s://%s%s", data.Proto, data.Host, data.URI),
@@ -119,18 +120,18 @@ func (l *slogLogger) Debugf(format string, args ...any) {
 }
 
 type restyLog struct {
-	Method         string            `json:"method"`
-	Proto          string            `json:"proto"`
-	Host           string            `json:"host"`
-	URI            string            `json:"uri"`
-	RequestHeaders map[string]string `json:"request_headers"`
-	RequestBody    string            `json:"request_body"`
-	Status         string            `json:"status"`
-	StatusCode     int               `json:"status_code"`
-	ResponseHeader map[string]string `json:"response_header"`
-	ResponseBody   string            `json:"response_body"`
-	CurlCmd        string            `json:"curl_cmd"`
-	Action         string            `json:"Action"`
+	Method         string `json:"method"`
+	Proto          string `json:"proto"`
+	Host           string `json:"host"`
+	URI            string `json:"uri"`
+	RequestHeaders string `json:"request_headers"`
+	RequestBody    string `json:"request_body"`
+	Status         string `json:"status"`
+	StatusCode     int    `json:"status_code"`
+	ResponseHeader string `json:"response_header"`
+	ResponseBody   string `json:"response_body"`
+	CurlCmd        string `json:"curl_cmd"`
+	Action         string `json:"Action"`
 }
 
 func CustomLogFormatter(dl *resty.DebugLog) string {
@@ -158,10 +159,14 @@ func CustomLogFormatter(dl *resty.DebugLog) string {
 	return string(j)
 }
 
-func formatHttpHeader(header http.Header) map[string]string {
+func formatHttpHeader(header http.Header) string {
 	formattedHeader := make(map[string]string)
 	for key, values := range header {
 		formattedHeader[key] = strings.Join(values, ", ")
 	}
-	return formattedHeader
+	headerString, err := json.MarshalIndent(formattedHeader, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(headerString)
 }
