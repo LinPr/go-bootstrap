@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LinPr/go-bootstrap/otel/kv"
+	"github.com/prometheus/otlptranslator"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -305,7 +306,9 @@ func (p *OtelProviders) initMetric(metricConfig MetricConfig, res *resource.Reso
 		return nil
 	}
 
-	promeExporter, err := prometheus.New()
+	promeExporter, err := prometheus.New(
+		prometheus.WithTranslationStrategy(otlptranslator.NoTranslation),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create prometheus exporter: %w", err)
 	}

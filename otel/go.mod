@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/go-logr/logr v1.4.4
+	github.com/prometheus/otlptranslator v1.0.0
 	github.com/sirupsen/logrus v1.10.2
 	go.opentelemetry.io/contrib/bridges/otellogr v0.20.1
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
@@ -43,7 +44,6 @@ require (
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
-	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0 // indirect
