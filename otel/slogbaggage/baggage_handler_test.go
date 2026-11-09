@@ -17,8 +17,6 @@ func TestBaggageHandler(t *testing.T) {
 
 	logger := slog.New(NewBaggageHandler(jsonHandler, WithBaggageMembers("user.id", "request.id")))
 
-	slog.SetDefault(logger)
-
 	userID, _ := baggage.NewMember("user.id", "12345")
 	requestID, _ := baggage.NewMember("request.id", "req-789")
 	sessionID, _ := baggage.NewMember("session.id", "sess-abc")
@@ -30,7 +28,7 @@ func TestBaggageHandler(t *testing.T) {
 
 	ctx := baggage.ContextWithBaggage(t.Context(), bag)
 
-	slog.InfoContext(ctx, "test message with baggage")
+	logger.InfoContext(ctx, "test message with baggage")
 
 	t.Logf("Log output:\n%s", buf.String())
 
@@ -45,7 +43,7 @@ func TestBaggageHandler(t *testing.T) {
 	if logEntry["request.id"] != "req-789" {
 		t.Errorf("expected request.id=req-789, got %v", logEntry["request.id"])
 	}
-	if logEntry["session.id"] != "sess-abc" {
-		t.Errorf("expected session.id=sess-abc, got %v", logEntry["session.id"])
+	if _, ok := logEntry["session.id"]; ok {
+		t.Errorf("expected session.id to be filtered out, got %v", logEntry["session.id"])
 	}
 }

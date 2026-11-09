@@ -22,9 +22,20 @@ go get github.com/LinPr/go-bootstrap/<module>
 
 ## Development
 
-This is a Go workspace (`go.work`). To work on all modules together:
+This is a Go workspace (`go.work`) holding several independent modules, so
+package patterns like `./...` do not work from the repository root. Use the
+`Taskfile.yml` tasks, which pick the Go toolchain matching the checked-out
+branch's `go.work`:
 
 ```bash
-go work sync
-go test ./...
+task env        # branch, required Go version, actual toolchain
+task build      # build every workspace module
+task vet        # vet every workspace module
+task test       # all tests, including the integration module
+task test:unit  # library modules only
+task tidy       # go mod tidy in each module
+task ci         # vet + test
 ```
+
+Do not run `go work sync` here: it rewrites every module's `go.mod` and
+silently upgrades dependencies.
