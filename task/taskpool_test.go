@@ -15,7 +15,7 @@ func TestTaskPool_Run_Int(t *testing.T) {
 		})
 	}
 
-	results := pool.Run(t.Context())
+	results := pool.Run(context.Background())
 	if len(results) != 5 {
 		t.Fatalf("expected 5 results, got %d", len(results))
 	}
@@ -44,7 +44,7 @@ func TestTaskPool_Run_ResultWithError(t *testing.T) {
 		return ResultWithErr{Err: expectedErr}
 	})
 
-	results := pool.Run(t.Context())
+	results := pool.Run(context.Background())
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}

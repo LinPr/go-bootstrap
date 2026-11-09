@@ -3,8 +3,8 @@ go 1.23.0
 use (
 	./grpc
 	./http
-	// ./resty
 	./otel
-	// ./task
+	./resty
+	./task
 	./test
 )

@@ -1,0 +1,102 @@
+version: '3'
+
+# Toolchain resolution: the `go` directive in go.work decides the release, so
+# the branch itself is the source of truth. GO_BIN is a matching local `go`
+# binary; when there is none, GO_CMD falls back to GOTOOLCHAIN, which downloads
+# the release and therefore works on a machine without any Go version manager.
+vars:
+  GOVERSION:
+    sh: "sed -n 's/^go //p' go.work | head -n 1"
+  GO_BIN:
+    sh: |
+      want='{{.GOVERSION}}'
+      for cand in "$(command -v go 2>/dev/null)" \
+                  /usr/local/go/bin/go \
+                  "$HOME"/.g/versions/*/bin/go; do
+        [ -n "$cand" ] || continue
+        [ -x "$cand" ] || continue
+        v=$(env -u GOROOT -u GOTOOLCHAIN "$cand" version 2>/dev/null | awk '{print $3}')
+        v=${v#go}
+        if [ "$v" = "$want" ] || [ "${v%.*}" = "${want%.*}" ]; then
+          echo "$cand"
+          exit 0
+        fi
+      done
+  GO_CMD:
+    sh: |
+      if [ -n '{{.GO_BIN}}' ]; then
+        echo "env -u GOROOT -u GOTOOLCHAIN '{{.GO_BIN}}'"
+      else
+        # GOSUMDB=off (a common local setting) blocks toolchain verification.
+        extra=""
+        if [ "$(go env GOSUMDB 2>/dev/null)" = "off" ]; then
+          extra="GOSUMDB=sum.golang.org"
+        fi
+        echo "env -u GOROOT -u GOTOOLCHAIN $extra GOTOOLCHAIN=go{{.GOVERSION}} go"
+      fi
+  PKGS: "github.com/LinPr/go-bootstrap/..."
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  env:
+    desc: Show the branch, the required Go version, and the toolchain in use
+    silent: true
+    cmds:
+      - 'echo "branch:   $(git branch --show-current)"'
+      - 'echo "go.work:  {{.GOVERSION}}"'
+      - 'echo "GO_BIN:   {{.GO_BIN}}"'
+      - '{{.GO_CMD}} version'
+
+  build:
+    desc: Build every workspace module
+    cmds:
+      - '{{.GO_CMD}} build {{.PKGS}}'
+
+  vet:
+    desc: Vet every workspace module
+    cmds:
+      - '{{.GO_CMD}} vet {{.PKGS}}'
+
+  test:
+    desc: Run all tests, including the integration module
+    cmds:
+      - '{{.GO_CMD}} test -count=1 {{.PKGS}}'
+
+  test:unit:
+    desc: Run tests for the library modules only (skips the integration module)
+    cmds:
+      - |
+        set -e
+        mods=$({{.GO_CMD}} list -m 2>/dev/null | grep -v '/test$')
+        [ -n "$mods" ] || { echo "no modules found" >&2; exit 1; }
+        args=""
+        for m in $mods; do args="$args $m/..."; done
+        {{.GO_CMD}} test -count=1 $args
+
+  fmt:
+    desc: Format all Go sources
+    cmds:
+      - '{{.GO_CMD}} fmt {{.PKGS}}'
+
+  tidy:
+    desc: Run go mod tidy in every workspace module with this branch's toolchain
+    cmds:
+      - |
+        set -e
+        mods=$({{.GO_CMD}} list -m -f '{{`{{if .Main}}{{.Dir}}{{end}}`}}' all 2>/dev/null)
+        [ -n "$mods" ] || { echo "no modules found" >&2; exit 1; }
+        for dir in $mods; do
+          echo "==> ${dir#$(pwd)/}"
+          ( cd "$dir" && {{.GO_CMD}} mod tidy )
+        done
+
+  ci:
+    desc: What a change must pass (vet plus tests)
+    cmds:
+      - task: vet
+      - task: test

@@ -50,7 +50,7 @@ func TestHttpOtelIntegration(t *testing.T) {
 
 	const iterations = 5
 	for i := range iterations {
-		rootCtx, rootSpan := tracer.Start(t.Context(), fmt.Sprintf("http-integration-root-%d", i))
+		rootCtx, rootSpan := tracer.Start(context.Background(), fmt.Sprintf("http-integration-root-%d", i))
 		rootTraceID := rootSpan.SpanContext().TraceID().String()
 
 		slog.InfoContext(rootCtx, "Starting HTTP integration test iteration", "iteration", i, "trace_id", rootTraceID)
@@ -93,7 +93,7 @@ func TestHttpOtelIntegration(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	shutdownCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := otel.ShutdownOtelProvider(shutdownCtx); err != nil {
 		t.Logf("warning: failed to shutdown provider: %v", err)

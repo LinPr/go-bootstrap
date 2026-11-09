@@ -52,8 +52,10 @@ func (p *taskPool[T]) Run(ctx context.Context) []T {
 	// Start the configured number of workers.
 
 	var wg sync.WaitGroup
-	for range p.workers {
-		wg.Go(func() {
+	for i := 0; i < p.workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
@@ -65,7 +67,7 @@ func (p *taskPool[T]) Run(ctx context.Context) []T {
 					results[j.idx] = j.fn(ctx)
 				}
 			}
-		})
+		}()
 	}
 
 	wg.Wait()
